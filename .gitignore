@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.DS_Store
+Thumbs.db
+
+# Geocoding cache は保持するが API キーは保持しない
+data/geocode_cache.json

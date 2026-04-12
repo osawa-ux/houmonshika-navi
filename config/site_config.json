@@ -1,0 +1,20 @@
+{
+  "site_name": "訪問歯科ナビ",
+  "site_description": "全国の訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト。寝たきり・通院困難な方向けに、歯科訪問診療・歯科衛生士訪問に対応する歯科を掲載しています。",
+  "site_url": "https://houmonshika-navi.com",
+  "entity_name": "歯科",
+  "entity_type": "訪問歯科対応の歯科診療所",
+  "care_type": "訪問歯科診療",
+  "entity_detail_prefix": "clinic",
+  "operator_name": "MDX株式会社",
+  "analytics": {
+    "ga4_id": ""
+  },
+  "attribution": {
+    "source": "医療情報ネット（厚生労働省）",
+    "source_url": "https://www.iryou.teikyouseido.mhlw.go.jp/"
+  },
+  "build": {
+    "output_dir": "dist"
+  }
+}
