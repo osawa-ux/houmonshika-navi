@@ -3,9 +3,63 @@
 訪問歯科に対応している歯科診療所を都道府県・市区町村から検索できるポータルサイト。
 **在宅ナビ** 群（`zaitaku-navi.com`）の訪問歯科版。
 
-- 公開URL: `https://shika.zaitaku-navi.com`（予定）
-- 親ブランド: `https://zaitaku-navi.com`
+- 公開URL: `https://shika.zaitaku-navi.com`（未公開）
+- 親ブランド: `https://zaitaku-navi.com`（未取得）
 - 姉妹サイト: `clinic.zaitaku-navi.com`（訪問診療）、`kango.zaitaku-navi.com`（訪問看護）、`care.zaitaku-navi.com`（居宅介護支援）、`welfare.zaitaku-navi.com`（福祉系）
+
+---
+
+## 現在のステータス（2026-04-12 時点）
+
+### 完了済み
+
+- **P0**: 医療情報ネットからの歯科データ取得経路確認（`kkn=3` + `kikanKbn=3`）
+- **P1**: `scrape_dental.py` 作成、神奈川県 2,507件の一覧+詳細取得
+- **P2**: エラー926件の再取得（811件リカバリ）、訪問歯科対応986件（39.3%）確定
+- **P3**: 神奈川県MVPサイト生成完了（トップ + 35市区町村 + 2,507歯科詳細 + sitemap）
+- **サブドメイン方針切替**: 全URLを `https://shika.zaitaku-navi.com` に統一
+- **Namecheap API認証情報**: `~/.secrets/MyPython/.env` に保存済み（Vaultにも同期）
+
+### 次回再開時の開始ポイント
+
+**公開作業（人手 + 自動化）:**
+
+1. ✅ Namecheap API認証情報保存（完了）
+2. ✅ Namecheap IP Whitelist 登録（完了）
+3. ⏳ **親ドメイン `zaitaku-navi.com` の取得** — Namecheap で取得
+4. ⏳ **Namecheap DNS ラッパースクリプト作成** — `scripts/namecheap_dns.py`
+5. ⏳ **GitHub リポジトリ作成** — `osawa-ux/houmonshika-navi`
+6. ⏳ **GitHub Pages 設定** — `dist/` を `gh-pages` ブランチにデプロイ or `docs/` にリネーム
+7. ⏳ **DNS設定** — `shika → osawa-ux.github.io` の CNAME（Namecheap または Cloudflare）
+8. ⏳ **HTTPS 有効化** — GitHub Pages 側で自動発行
+9. ⏳ **GA4 ID 取得** → `config/site_config.json` の `analytics.ga4_id` に設定 → 再ビルド
+
+**P4（品質強化）:**
+
+- Google Maps API で Geocoding 一括付与（Nominatimは日本語住所35%で断念、P4でGoogle Maps APIに差し替え）
+- 厚生局歯科届出データとの突合（在宅療養支援歯科診療所バッジ）
+- Google Search Console 登録 + sitemap送信
+- unknown 115件の「未確認」ラベル表示検討
+
+**P5（全国展開）:**
+
+- `scrape_dental.py` を47都道府県で実行（約2〜3時間）
+- `retry_dental_errors.py` で全国エラー再取得
+- `build_site.py` は既に47都道府県対応済み（PREF_SLUG等定数完備）
+
+### 未解決の課題
+
+- 検索JSON 749KB は許容範囲だが、全国展開時は都道府県別分割で問題なし
+- 地図機能なし（P4でGoogle Maps APIを導入するまで詳細ページはOpenStreetMap iframeが空になる）
+- 親ドメイン `zaitaku-navi.com` 未取得のため、姉妹サイトへのリンクはフッターに入れていない
+
+### 関連リポジトリ
+
+- データ収集・スクレイピング: `~/projects/MyPython/` (`scrape_dental.py`, `retry_dental_errors.py`)
+- 元データ: `~/projects/MyPython/data/clinics_dental_kanagawa.json` (2,507件)
+- 参考実装（ビルドシステム）: `~/projects/kyotaku-navi/build_site.py`
+
+---
 
 ## MVP（神奈川県パイロット版）
 
