@@ -1,7 +1,10 @@
 {
   "site_name": "訪問歯科ナビ",
-  "site_description": "全国の訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト。寝たきり・通院困難な方向けに、歯科訪問診療・歯科衛生士訪問に対応する歯科を掲載しています。",
-  "site_url": "https://houmonshika-navi.com",
+  "site_description": "訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト。寝たきり・通院困難な方向けに、歯科訪問診療・歯科衛生士訪問に対応する歯科を掲載しています。在宅ナビ群の訪問歯科版。",
+  "site_url": "https://shika.zaitaku-navi.com",
+  "parent_brand": "在宅ナビ",
+  "parent_brand_url": "https://zaitaku-navi.com",
+  "cname_domain": "shika.zaitaku-navi.com",
   "entity_name": "歯科",
   "entity_type": "訪問歯科対応の歯科診療所",
   "care_type": "訪問歯科診療",

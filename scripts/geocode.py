@@ -28,7 +28,7 @@ DATA_FILE = BASE_DIR / 'data' / 'normalized' / 'clinics_dental.json'
 CACHE_FILE = BASE_DIR / 'data' / 'geocode_cache.json'
 
 NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
-USER_AGENT = 'houmonshika-navi/1.0 (https://houmonshika-navi.com)'
+USER_AGENT = 'houmonshika-navi/1.0 (https://shika.zaitaku-navi.com)'
 RATE_LIMIT_SEC = 1.1  # Nominatim の利用規約（1req/sec以下）
 
 

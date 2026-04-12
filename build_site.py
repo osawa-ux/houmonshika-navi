@@ -50,6 +50,9 @@ with open(CONFIG_PATH, encoding='utf-8') as f:
 SITE_NAME = CFG['site_name']
 SITE_DESC = CFG['site_description']
 SITE_URL = CFG.get('site_url', '').rstrip('/')
+CNAME_DOMAIN = CFG.get('cname_domain', '')
+PARENT_BRAND = CFG.get('parent_brand', '')
+PARENT_BRAND_URL = CFG.get('parent_brand_url', '').rstrip('/')
 ENTITY_NAME = CFG.get('entity_name', '歯科')
 ENTITY_TYPE = CFG.get('entity_type', '訪問歯科対応の歯科診療所')
 CARE_TYPE = CFG.get('care_type', '訪問歯科診療')
@@ -351,9 +354,13 @@ def make_breadcrumb(items):
 
 
 def make_footer():
+    parent_line = ''
+    if PARENT_BRAND:
+        parent_line = f'<p class="note">{h(SITE_NAME)}は{h(PARENT_BRAND)}群の訪問歯科版です。</p>'
     return f"""<footer>
   <div class="footer-inner">
     <p><strong>{h(SITE_NAME)}</strong> — 訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト</p>
+    {parent_line}
     <p class="note">
       情報は <a href="{h(ATTRIBUTION_URL)}" target="_blank" rel="noopener">{h(ATTRIBUTION)}</a> をもとに作成しています。<br>
       実際のサービス提供内容・料金・対応可否については各歯科診療所に直接ご確認ください。
@@ -918,6 +925,10 @@ def build_site():
 
     # .nojekyll
     (DIST_DIR / '.nojekyll').write_text('', encoding='utf-8')
+
+    # CNAME（GitHub Pages カスタムドメイン）
+    if CNAME_DOMAIN:
+        (DIST_DIR / 'CNAME').write_text(f'{CNAME_DOMAIN}\n', encoding='utf-8')
 
     # 404ページ
     page_404 = make_head(f'ページが見つかりません | {SITE_NAME}',

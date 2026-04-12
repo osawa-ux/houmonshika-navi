@@ -1,6 +1,11 @@
 # 訪問歯科ナビ（houmonshika-navi）
 
 訪問歯科に対応している歯科診療所を都道府県・市区町村から検索できるポータルサイト。
+**在宅ナビ** 群（`zaitaku-navi.com`）の訪問歯科版。
+
+- 公開URL: `https://shika.zaitaku-navi.com`（予定）
+- 親ブランド: `https://zaitaku-navi.com`
+- 姉妹サイト: `clinic.zaitaku-navi.com`（訪問診療）、`kango.zaitaku-navi.com`（訪問看護）、`care.zaitaku-navi.com`（居宅介護支援）、`welfare.zaitaku-navi.com`（福祉系）
 
 ## MVP（神奈川県パイロット版）
 
@@ -103,13 +108,18 @@ python build_site.py --preview
 
 ## デプロイ
 
-GitHub Pages での公開を想定。
+GitHub Pages + Cloudflare DNS（親ドメイン `zaitaku-navi.com` 配下）での公開を想定。
 
 ```bash
-# dist/ を main ブランチにコミットして push
-# GitHub Pages 設定で source = main / root (dist ではなく dist 配下)
-# もしくは gh-pages ブランチに dist/ をデプロイ
+# 1. dist/ を GitHub リポジトリに push
+# 2. GitHub Pages settings で source = main / dist または gh-pages
+# 3. Cloudflare DNS で CNAME レコード追加:
+#    shika → osawa-ux.github.io (DNS only)
+# 4. GitHub Pages settings で custom domain に shika.zaitaku-navi.com を設定
+# 5. Enforce HTTPS を有効化（数分〜30分で証明書発行）
 ```
+
+CNAME ファイルは `build_site.py` が `config/site_config.json` の `cname_domain` から自動生成します。
 
 ## 運営
 

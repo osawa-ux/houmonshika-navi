@@ -20,4 +20,4 @@ Disallow: /
 User-agent: Google-Extended
 Disallow: /
 
-Sitemap: https://houmonshika-navi.com/sitemap.xml
+Sitemap: https://shika.zaitaku-navi.com/sitemap.xml
