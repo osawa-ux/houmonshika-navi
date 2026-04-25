@@ -887,10 +887,13 @@ def build_site():
     print('index.html / pref/kanagawa.html 生成完了')
 
     # 市区町村ページ
+    # 注: ファイル名は生日本語（UTF-8）で保存する。
+    # ブラウザは URL エンコード済みパス（city_slug）でリクエストするが、
+    # GitHub Pages 側が URL デコードして実ファイル（生日本語名）にマッチする。
+    # ファイル名自体を URL エンコード済みにすると、リテラル % が含まれて 404 になる。
     for cname, clinics_in_city in cities.items():
         html = build_city_page(cname, clinics_in_city, pref_name)
-        cslug = city_slug(cname)
-        (DIST_DIR / 'pref' / 'kanagawa' / f'{cslug}.html').write_text(html, encoding='utf-8')
+        (DIST_DIR / 'pref' / 'kanagawa' / f'{cname}.html').write_text(html, encoding='utf-8')
     print(f'市区町村ページ {len(cities)}枚生成完了')
 
     # 歯科詳細ページ
