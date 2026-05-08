@@ -9,3 +9,16 @@ Thumbs.db
 
 # Geocoding cache は保持するが API キーは保持しない
 data/geocode_cache.json
+
+# === auto-commit 第二防御（2026-05-08 追加）===
+# push-pc skill から auto-commit を撤去（2026-05-08）。万が一の保険として
+# 中間生成物・診断結果・バックアップを除外する。
+tmp/
+tmp_*.txt
+tmp_*.json
+audit_*.json
+diagnose_*.json
+*_premail_*.json
+*.bak
+*.before-*
+push.ps1.before-*
