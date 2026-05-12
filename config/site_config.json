@@ -19,5 +19,27 @@
   },
   "build": {
     "output_dir": "dist"
-  }
+  },
+  "portal_network_links": [
+    {
+      "href": "https://zaitakuclinic-navi.com/",
+      "anchor": "在宅クリニックを探す",
+      "description": "訪問診療に対応するクリニックを地域から見つける"
+    },
+    {
+      "href": "https://kango.zaitaku-navi.com/",
+      "anchor": "訪問看護を探す",
+      "description": "全国の訪問看護事業所を都道府県・市区町村から探す"
+    },
+    {
+      "href": "https://care.zaitaku-navi.com/",
+      "anchor": "ケアマネを探す",
+      "description": "ケアマネジャー事業所を市区町村単位で検索"
+    },
+    {
+      "href": "https://www.souzoku-zeirishi-navi.com/",
+      "anchor": "相続税理士を探す",
+      "description": "相続に強い税理士事務所を全国から探す"
+    }
+  ]
 }

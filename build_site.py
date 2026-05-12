@@ -60,6 +60,7 @@ OPERATOR_NAME = CFG.get('operator_name', 'MDX株式会社')
 GA4_ID = CFG.get('analytics', {}).get('ga4_id', '')
 ATTRIBUTION = CFG.get('attribution', {}).get('source', '')
 ATTRIBUTION_URL = CFG.get('attribution', {}).get('source_url', '')
+PORTAL_NETWORK_LINKS = CFG.get('portal_network_links', [])
 
 DATA_FILE = BASE_DIR / 'data' / 'normalized' / 'clinics_dental.json'
 DIST_DIR = BASE_DIR / CFG.get('build', {}).get('output_dir', 'dist')
@@ -365,6 +366,21 @@ def make_footer():
     parent_line = ''
     if PARENT_BRAND:
         parent_line = f'<p class="note">{h(SITE_NAME)}は{h(PARENT_BRAND)}群の訪問歯科版です。</p>'
+    if PORTAL_NETWORK_LINKS:
+        items = '\n'.join(
+            f'        <li><a href="{h(link["href"])}">{h(link["anchor"])}</a> — {h(link["description"])}</li>'
+            for link in PORTAL_NETWORK_LINKS
+        )
+        portal_network_section = (
+            '<section class="portal-network" aria-label="関連サービス">\n'
+            '      <h3>在宅ナビシリーズ</h3>\n'
+            '      <ul>\n'
+            f'{items}\n'
+            '      </ul>\n'
+            '    </section>'
+        )
+    else:
+        portal_network_section = ''
     return f"""<footer>
   <div class="footer-inner">
     <p><strong>{h(SITE_NAME)}</strong> — 訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト</p>
@@ -373,15 +389,7 @@ def make_footer():
       情報は <a href="{h(ATTRIBUTION_URL)}" target="_blank" rel="noopener">{h(ATTRIBUTION)}</a> をもとに作成しています。<br>
       実際のサービス提供内容・料金・対応可否については各歯科診療所に直接ご確認ください。
     </p>
-    <section class="portal-network" aria-label="関連サービス">
-      <h3>在宅ナビシリーズ</h3>
-      <ul>
-        <li><a href="https://zaitakuclinic-navi.com/">在宅クリニックを探す</a> — 訪問診療に対応するクリニックを地域から見つける</li>
-        <li><a href="https://kango.zaitaku-navi.com/">訪問看護を探す</a> — 全国の訪問看護事業所を都道府県・市区町村から探す</li>
-        <li><a href="https://care.zaitaku-navi.com/">ケアマネを探す</a> — ケアマネジャー事業所を市区町村単位で検索</li>
-        <li><a href="https://www.souzoku-zeirishi-navi.com/">相続税理士を探す</a> — 相続に強い税理士事務所を全国から探す</li>
-      </ul>
-    </section>
+    {portal_network_section}
     <div class="footer-bottom">&copy; 2025 {h(SITE_NAME)} ({h(OPERATOR_NAME)})</div>
   </div>
 </footer>
