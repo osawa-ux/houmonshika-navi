@@ -372,8 +372,8 @@ def make_footer():
             for link in PORTAL_NETWORK_LINKS
         )
         portal_network_section = (
-            '<section class="portal-network" aria-label="関連サービス">\n'
-            '      <h3>在宅ナビシリーズ</h3>\n'
+            '<section class="portal-network" aria-labelledby="portal-network-heading">\n'
+            '      <h3 id="portal-network-heading">在宅ナビシリーズ</h3>\n'
             '      <ul>\n'
             f'{items}\n'
             '      </ul>\n'
