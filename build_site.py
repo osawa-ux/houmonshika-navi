@@ -998,6 +998,19 @@ def build_site():
         print(f'  [OK] 全チェック通過')
     print(f'{"=" * 60}')
 
+    # heartbeat: record last run (fail-safe, never raises)
+    if '--preview' not in sys.argv:
+        try:
+            import subprocess as _hb_subprocess
+            import sys as _hb_sys
+            from pathlib import Path as _hb_Path
+            _hb_subprocess.run(
+                [_hb_sys.executable, str(_hb_Path.home() / "central-registry" / "scripts" / "heartbeat.py"), "SHIKA-BUILD-01"],
+                capture_output=True,
+            )
+        except Exception:
+            pass
+
     # プレビューサーバー
     if '--preview' in sys.argv:
         import http.server
