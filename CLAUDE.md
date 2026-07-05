@@ -107,3 +107,11 @@ python ~/.claude/skills/_shared/resolve_vault.py --join "20_Projects/shika/index
 ## 作業完了時の報告形式
 
 `SAVE_DECISION: yes / no` / `SAVE_REASON:` / `SAVE_CATEGORY:` / `SAVE_TITLE:` / `SAVE_SUMMARY:` / `NEXT_ACTIONS:` をグローバル CLAUDE.md に準拠して出力。
+
+---
+
+## docs 構成（decisions / design / runbooks）
+
+決定の正本は `docs/decisions/`（連番 MADR・不変・supersede 更新）。設計 living doc は `docs/design/`。運用手順は `docs/runbooks/`。
+
+運用ルール正本: vault `70_SOP/product-docs-adr.md`
