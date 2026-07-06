@@ -1,0 +1,27 @@
+# データ整合性チェック（scripts/validate_data.py）を push / PR で自動実行する。
+#
+# この repo は4つの姉妹サイト（clinic/kango/shika/care/welfare）の中で唯一
+# ビルド出力 dist/ が master に git-tracked されているため、チェックアウトのみで
+# 検証が完結し、最小 CI が成立する（他 repo は dist/ 相当がビルド出力 or リポジトリ
+# 外にあるため、build/deploy 手順側への組込みが適切 — 詳細は各 repo の
+# scripts/validate_data.py docstring 参照）。
+#
+# 標準ライブラリのみで動く軽量スクリプトのため、依存インストール不要。
+name: validate-data
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Run validate_data.py
+        run: python scripts/validate_data.py
