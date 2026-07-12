@@ -17,7 +17,9 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding='utf-8')
 
 BASE_DIR = Path(__file__).parent.parent
-INPUT = Path('C:/Users/volzs/projects/MyPython/data/clinics_dental_kanagawa.json')
+# 2026-07-12 修正: 別PCユーザー名（volzs）へのハードコード絶対パスだった。
+# sibling repo（~/projects/MyPython）への相対参照に変更し、クロスPCで動作するようにした。
+INPUT = BASE_DIR.parent / 'MyPython' / 'data' / 'clinics_dental_kanagawa.json'
 OUTPUT = BASE_DIR / 'data' / 'normalized' / 'clinics_dental.json'
 
 # 都道府県名除去パターン
