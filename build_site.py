@@ -474,6 +474,8 @@ def build_index(clinics, pref_name, visiting_count):
     <div id="search-results"></div>
   </div>
 
+  <p style="margin:16px 0"><a href="/nearby.html" class="city-link" style="display:inline-block;font-weight:bold">📍 現在地から近い歯科を探す</a></p>
+
   <h2 style="margin-top:28px;font-size:1.15em">市区町村から探す</h2>
   {city_html}
 
@@ -803,12 +805,166 @@ def generate_geo_json(clinics, path):
     return len(geo)
 
 
+NEARBY_JS = r"""
+(function() {
+  var R = 6371;
+  var MAX_RESULTS = 20;
+
+  function haversine(lat1, lng1, lat2, lng2) {
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLng = (lng2 - lng1) * Math.PI / 180;
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+
+  function renderCard(c) {
+    var badge = c.v ? '<span class="specs">訪問歯科対応</span>' : '';
+    return '<div class="card" style="margin-bottom:8px">' +
+      '<h3><a href="/clinic/' + esc(c.id) + '.html">' + esc(c.n) + '</a></h3>' +
+      '<div class="meta">' +
+      '<span class="addr">' + esc(c.a) + '</span>' +
+      '<span class="tel">📍 現在地から約 ' + c._dist.toFixed(1) + 'km</span>' +
+      badge +
+      '</div></div>';
+  }
+
+  var resultDiv = document.getElementById('nearbyResults');
+  var statusDiv = document.getElementById('nearbyStatus');
+  var visitOnly = document.getElementById('nearbyVisitOnly');
+  var lastData = null;
+  function showStatus(msg) { statusDiv.innerHTML = msg; }
+
+  if (!navigator.geolocation) {
+    showStatus('<p style="color:#c62828;">お使いのブラウザは位置情報に対応していません。</p>');
+    return;
+  }
+
+  function render() {
+    if (!lastData) return;
+    var pool = lastData.slice();
+    if (visitOnly && visitOnly.checked) {
+      pool = pool.filter(function(c) { return c.v === 1; });
+    }
+
+    // 候補件数に応じて表示半径を自動調整（都市部で近すぎる候補に絞る）
+    var radius;
+    if (pool.length > 80) { radius = 4; }
+    else if (pool.length > 40) { radius = 6; }
+    else if (pool.length > 15) { radius = 8; }
+    else { radius = 16; }
+
+    var display = pool.filter(function(c) { return c._dist <= radius; });
+    display.sort(function(a, b) { return a._dist - b._dist; });
+
+    if (display.length === 0) {
+      showStatus('<p>現在地から16km以内に該当する歯科が見つかりませんでした。</p>' +
+                 '<p><a href="/">市区町村から探す →</a></p>');
+      resultDiv.innerHTML = '';
+      return;
+    }
+
+    var shown = display.slice(0, MAX_RESULTS);
+    showStatus('<p>現在地から <strong>' + radius + 'km</strong> 以内に <strong>' + display.length +
+               '</strong> 件。近い順に ' + shown.length + ' 件を表示しています。</p>');
+    resultDiv.innerHTML = shown.map(renderCard).join('');
+  }
+
+  showStatus('<p>📍 位置情報を取得中...</p>');
+
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var myLat = pos.coords.latitude;
+    var myLng = pos.coords.longitude;
+    showStatus('<p>📍 位置情報を取得しました。データを読み込み中...</p>');
+
+    fetch('/data/clinics_geo.json')
+      .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(data) {
+        var initial = [];
+        for (var i = 0; i < data.length; i++) {
+          var c = data[i];
+          if (typeof c.lt !== 'number' || typeof c.lg !== 'number') continue;
+          var d = haversine(myLat, myLng, c.lt, c.lg);
+          if (d <= 16) { c._dist = d; initial.push(c); }
+        }
+        lastData = initial;
+        if (visitOnly) visitOnly.addEventListener('change', render);
+        render();
+      })
+      .catch(function(e) {
+        showStatus('<p style="color:#c62828;">データの読み込みに失敗しました。<br><small>' + esc(e.message) + '</small></p>');
+      });
+  }, function(err) {
+    if (err.code === 1) {
+      showStatus(
+        '<div style="text-align:left;max-width:500px;margin:0 auto;">' +
+        '<p style="color:#c62828;font-weight:bold;margin-bottom:12px;">位置情報の使用が許可されていません</p>' +
+        '<p style="margin-bottom:8px;">以下の手順で位置情報を許可してください：</p>' +
+        '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:8px;">' +
+        '<strong>iPhone (Safari)</strong><br>設定 → Safari → 位置情報 → 「確認」に変更<br>その後このページを再読み込み</div>' +
+        '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:8px;">' +
+        '<strong>Android (Chrome)</strong><br>アドレスバー左の鍵マーク → 位置情報 → 許可</div>' +
+        '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+        '<strong>PC (Chrome)</strong><br>アドレスバー左の鍵マーク → 位置情報 → 許可 → 再読み込み</div>' +
+        '<p><a href="/">市区町村から探す →</a></p></div>');
+    } else {
+      var msgs = {2: '位置情報を取得できませんでした。', 3: '位置情報の取得がタイムアウトしました。'};
+      showStatus('<p style="color:#c62828;">' + (msgs[err.code] || '位置情報の取得に失敗しました。') +
+        '</p><p><a href="/">市区町村から探す →</a></p>');
+    }
+  }, {enableHighAccuracy: false, timeout: 10000, maximumAge: 300000});
+})();
+"""
+
+
+def build_nearby_page():
+    """現在地から近い歯科を探すページ（clinic / kango / care と同一導線）"""
+    title = f'現在地から近い{ENTITY_TYPE}を探す｜{SITE_NAME}'
+    desc = f'現在地周辺の歯科診療所を距離順に表示。GPS位置情報を使って、訪問歯科に対応した近くの歯科をすぐに見つけられます。'
+    canonical = f'{SITE_URL}/nearby.html'
+
+    bc = make_breadcrumb([('トップ', '/'), ('現在地から探す', '')])
+
+    body = f"""<body>
+{make_header()}
+{bc}
+<div class="container">
+  <div class="hero">
+    <h1>現在地から近い{ENTITY_TYPE}を探す</h1>
+    <p>GPS位置情報を使って、現在地周辺の歯科診療所を近い順に最大20件表示します。</p>
+  </div>
+
+  <div class="filter-bar">
+    <label><input type="checkbox" id="nearbyVisitOnly">訪問歯科対応のみ</label>
+  </div>
+
+  <div id="nearbyStatus" style="padding:20px;text-align:center"></div>
+  <div id="nearbyResults" class="card-grid"></div>
+
+  <p style="margin-top:20px;font-size:0.9em;color:#666">
+    ※ 表示は直線距離に基づく近隣候補です。訪問歯科対応の判定は医療情報ネット（厚生労働省）の登録情報に基づきます。
+    実際の訪問可否・対応エリア・料金については各歯科診療所に直接お問い合わせください。
+  </p>
+
+  <p style="margin-top:24px"><a href="/">&larr; トップページに戻る</a></p>
+</div>
+{make_footer()}
+<script>{NEARBY_JS}</script>
+</body></html>"""
+
+    return make_head(title, desc, canonical) + body
+
+
 def generate_sitemap(clinics, cities, dist_dir):
     """sitemap.xml"""
     today = date.today().isoformat()
     urls = []
     urls.append((f'{SITE_URL}/', '1.0', 'weekly'))
     urls.append((f'{SITE_URL}/pref/kanagawa.html', '0.9', 'weekly'))
+    urls.append((f'{SITE_URL}/nearby.html', '0.5', 'monthly'))
     urls.append((f'{SITE_URL}/about.html', '0.3', 'yearly'))
 
     for cname in cities:
@@ -927,6 +1083,10 @@ def build_site():
         html = build_clinic_page(c, pref_name)
         (DIST_DIR / 'clinic' / f'{cid}.html').write_text(html, encoding='utf-8')
     print(f'歯科詳細ページ {len(clinics):,}枚生成完了')
+
+    # 現在地から探すページ
+    (DIST_DIR / 'nearby.html').write_text(build_nearby_page(), encoding='utf-8')
+    print('nearby.html 生成完了')
 
     # About ページ
     about = build_about_page(total, visiting)
