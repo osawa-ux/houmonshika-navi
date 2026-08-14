@@ -3,6 +3,7 @@
 
 使用方法:
   python build_site.py              # サイト生成
+  python build_site.py --build-only # サイト生成（heartbeatを記録しない）
   python build_site.py --preview    # 生成後にローカルサーバー起動
 
 入力: data/normalized/clinics_dental.json
@@ -57,6 +58,11 @@ ENTITY_NAME = CFG.get('entity_name', '歯科')
 ENTITY_TYPE = CFG.get('entity_type', '訪問歯科対応の歯科診療所')
 CARE_TYPE = CFG.get('care_type', '訪問歯科診療')
 OPERATOR_NAME = CFG.get('operator_name', 'MDX株式会社')
+OPERATOR_URL = CFG.get('operator_url', '')
+OPERATOR_PRIVACY_URL = CFG.get('operator_privacy_url', '')
+OPERATOR_CONTACT_URL = CFG.get('operator_contact_url', '')
+DATA_RECORDED_DATE = CFG.get('data_recorded_date', '')
+NEARBY_MIN_COVERAGE_RATIO = float(CFG.get('nearby_min_coverage_ratio', 0.8))
 GA4_ID = CFG.get('analytics', {}).get('ga4_id', '')
 ATTRIBUTION = CFG.get('attribution', {}).get('source', '')
 ATTRIBUTION_URL = CFG.get('attribution', {}).get('source_url', '')
@@ -116,106 +122,54 @@ def clinic_slug(clinic_id: str) -> str:
     return re.sub(r'[^a-zA-Z0-9_-]', '_', clinic_id)
 
 
+def page_root(depth: int) -> str:
+    """生成ページから成果物ルートへのdocument-relative prefix。"""
+    return '../' * depth
+
+
+def internal_url(depth: int, path: str = '') -> str:
+    """同じ成果物をドメイン直下と /shika/ 配下の両方で使える相対URL。"""
+    normalized = path.lstrip('/')
+    return page_root(depth) + (normalized or 'index.html')
+
+
+def visiting_status(c) -> str:
+    """公開UIで使う訪問歯科情報の3状態。"""
+    if c.get('detail_status') == 'unknown':
+        return 'unknown'
+    if c.get('has_visiting_dental'):
+        return 'confirmed_yes'
+    return 'confirmed_no'
+
+
 # =============================================================
 # CSS（歯科向けカラー: #0066a0 ティールブルー）
 # =============================================================
 
 COMMON_CSS = """\
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;color:#2c3e50;line-height:1.7;background:#f5f7fa}
-a{color:#0066a0;text-decoration:none}a:hover{text-decoration:underline}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;color:#263746;line-height:1.7;background:#f5f7fa}
+a{color:#005f96;text-decoration:underline;text-underline-offset:2px}.city-link,.site-title{text-decoration:none}a:hover{text-decoration-thickness:2px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #b45309;outline-offset:3px}
+.skip-link{position:absolute;left:8px;top:-80px;background:#fff;color:#003b5c;padding:10px 14px;z-index:1000}.skip-link:focus{top:8px}
 .container{max-width:1000px;margin:0 auto;padding:20px 16px}
-
-/* Header */
-header{background:linear-gradient(135deg,#0066a0 0%,#004d7a 100%);color:#fff;padding:14px 0;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+header{background:linear-gradient(135deg,#0066a0 0%,#004d7a 100%);color:#fff;padding:14px 0;box-shadow:0 2px 4px rgba(0,0,0,.1)}
 header .header-inner{max-width:1000px;margin:0 auto;padding:0 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-.site-title{color:#fff;font-size:1.3em;font-weight:bold;text-decoration:none;display:block}
-.site-title:hover{text-decoration:none}
-.site-subtitle{color:rgba(255,255,255,0.85);font-size:0.8em;margin-top:2px}
-header nav a{color:rgba(255,255,255,0.9);font-size:0.85em;margin-left:16px}
-
-/* Breadcrumb */
-.breadcrumb{font-size:0.85em;color:#666;margin:16px 0 8px;padding:0 16px;max-width:1000px;margin-left:auto;margin-right:auto}
-.breadcrumb a{color:#0066a0}
-
-/* Hero */
-.hero{background:#fff;padding:28px 20px;border-radius:10px;margin-bottom:20px;border-left:4px solid #0066a0}
-.hero h1{font-size:1.6em;margin-bottom:10px;color:#0066a0}
-.hero p{color:#555;margin-bottom:8px}
-
-/* Cards */
-.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin:16px 0}
-.card{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;transition:box-shadow 0.2s;position:relative}
-.card:hover{box-shadow:0 4px 12px rgba(0,102,160,0.1);border-color:#0066a0}
-.card h3{font-size:1em;margin-bottom:8px;line-height:1.4}
-.card h3 a{color:#0066a0}
-.card .meta{font-size:0.85em;color:#666;line-height:1.6}
-.card .meta .addr{display:block}
-.card .meta .tel{display:block;margin-top:4px}
-.card .specs{margin-top:6px;font-size:0.75em;color:#888}
-
-/* Badges */
-.badges{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:6px}
-.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:0.72em;font-weight:bold;white-space:nowrap}
-.badge-visit{background:#fff3cd;color:#856404;border:1px solid #ffeaa7}
-.badge-hyg{background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
-.badge-specialty{background:#e9ecef;color:#495057;border:1px solid #dee2e6;font-weight:normal}
-
-/* Filter */
-.filter-bar{background:#fff;padding:14px 16px;border-radius:8px;margin:16px 0;border:1px solid #e0e0e0;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.filter-bar label{font-size:0.9em;cursor:pointer;user-select:none}
-.filter-bar input[type=checkbox]{margin-right:4px;vertical-align:middle}
-.filter-bar .count{margin-left:auto;font-size:0.85em;color:#666}
-
-/* City grid */
-.city-grid{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 20px}
-.city-link{display:inline-block;padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:16px;font-size:0.88em;white-space:nowrap}
-.city-link:hover{background:#e3f2fd;border-color:#0066a0;text-decoration:none}
-.city-link .count{color:#888;font-size:0.85em;margin-left:4px}
-
-/* Detail page */
-.detail-header{background:#fff;padding:24px;border-radius:10px;margin-bottom:20px;border-left:4px solid #0066a0}
-.detail-header h1{font-size:1.5em;margin-bottom:10px;color:#0066a0}
-.info-table{width:100%;border-collapse:collapse;margin:16px 0;background:#fff}
-.info-table th{text-align:left;padding:12px 14px;background:#f8f9fa;border:1px solid #e0e0e0;width:140px;font-size:0.9em;color:#555;vertical-align:top}
-.info-table td{padding:12px 14px;border:1px solid #e0e0e0;font-size:0.95em}
-.map-container{margin:16px 0;border-radius:8px;overflow:hidden;background:#fff;padding:4px}
-
-/* Stats */
-.stats-bar{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0}
-.stat-box{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:14px 18px;text-align:center;min-width:130px;flex:1;max-width:200px}
-.stat-box .num{font-size:1.8em;font-weight:bold;color:#0066a0}
-.stat-box .label{font-size:0.8em;color:#888;margin-top:2px}
-
-/* Footer */
-footer{background:#2c3e50;color:#fff;padding:32px 0;margin-top:40px;font-size:0.85em}
-footer .footer-inner{max-width:1000px;margin:0 auto;padding:0 16px}
-footer a{color:#81d4fa}
-footer .note{font-size:0.8em;color:#bbb;margin-top:12px;line-height:1.6}
-.footer-bottom{margin-top:16px;padding-top:12px;border-top:1px solid #555;text-align:center;color:#999;font-size:0.8em}
-
-/* Portal network */
-.portal-network{margin-top:20px;padding-top:16px;border-top:1px solid #3d4f62}
-.portal-network h3{font-size:0.9em;color:#ccc;margin-bottom:8px;font-weight:normal}
-.portal-network ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px 0}
-.portal-network li{font-size:0.8em;color:#aaa;width:100%}
-.portal-network li a{color:#81d4fa}
-.portal-network li a:hover{text-decoration:underline}
-
-/* Search box */
-.search-box{margin:16px 0;padding:16px;background:#fff;border:1px solid #e0e0e0;border-radius:8px}
-.search-box input[type=text]{width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:4px;font-size:1em}
-.search-box input[type=text]:focus{outline:none;border-color:#0066a0;box-shadow:0 0 0 2px rgba(0,102,160,0.1)}
-
-/* Responsive */
-@media(max-width:600px){
-  .card-grid{grid-template-columns:1fr}
-  header .header-inner{flex-direction:column;align-items:flex-start}
-  .info-table th{width:100px;font-size:0.8em;padding:8px 10px}
-  .info-table td{font-size:0.85em;padding:8px 10px}
-  .hero h1{font-size:1.3em}
-  .detail-header h1{font-size:1.2em}
-}
+.site-title{color:#fff;font-size:1.3em;font-weight:bold;display:flex;align-items:center;min-height:44px}.site-subtitle{color:#fff;font-size:.85em;margin-top:2px}
+header nav a{color:#fff;font-size:.9em;margin-left:12px;display:inline-flex;align-items:center;min-height:44px}
+.breadcrumb{font-size:.9em;color:#4b5965;margin:16px auto 8px;padding:0 16px;max-width:1000px}.breadcrumb a{color:#005f96}
+.hero{background:#fff;padding:28px 20px;border-radius:10px;margin-bottom:20px;border-left:4px solid #0066a0}.hero h1{font-size:1.6em;margin-bottom:10px;color:#005f96}.hero p{color:#394b59;margin-bottom:8px}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin:16px 0}.card{background:#fff;border:1px solid #d6dce1;border-radius:8px;padding:16px;position:relative}.card:hover{box-shadow:0 4px 12px rgba(0,102,160,.1);border-color:#0066a0}.card h3{font-size:1em;margin-bottom:8px;line-height:1.4}.card .meta{font-size:.9em;color:#4b5965;line-height:1.6}.card .meta span{display:block}.card .specs{margin-top:6px;font-size:.8em;color:#4b5965}
+.badges{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:6px}.badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:.78em;font-weight:bold;white-space:nowrap}.badge-visit{background:#fff3cd;color:#664d03;border:1px solid #e6c96b}.badge-hyg{background:#d1ecf1;color:#0c5460;border:1px solid #8fc3cf}.badge-no{background:#eef1f3;color:#3e4b55;border:1px solid #b8c0c7}.badge-unknown{background:#f3e8ff;color:#5b247a;border:1px solid #caa8df}.badge-specialty{background:#e9ecef;color:#3f4a54;border:1px solid #cbd1d6;font-weight:normal}
+.filter-bar{background:#fff;padding:14px 16px;border-radius:8px;margin:16px 0;border:1px solid #d6dce1;display:flex;flex-wrap:wrap;gap:12px;align-items:center}.filter-bar label,.check-label{font-size:.95em;cursor:pointer;user-select:none;display:inline-flex;align-items:center;min-height:44px;padding:0 6px}.filter-bar input[type=checkbox],.check-label input{width:20px;height:20px;margin-right:7px}.filter-bar .count{margin-left:auto;font-size:.9em;color:#4b5965}
+.text-input{width:100%;min-height:44px;padding:9px 12px;border:1px solid #7b8791;border-radius:4px;font-size:1em}.field-label{display:block;font-weight:bold;margin-bottom:4px}.help,.status-note{font-size:.9em;color:#4b5965;margin-top:4px}
+.city-grid{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 20px}.city-link{display:inline-flex;align-items:center;min-height:44px;padding:7px 12px;background:#fff;border:1px solid #cbd1d6;border-radius:18px;font-size:.9em;white-space:nowrap}.city-link:hover{background:#e3f2fd;border-color:#0066a0}.city-link .count{color:#46535e;font-size:.9em;margin-left:4px}
+.detail-header{background:#fff;padding:24px;border-radius:10px;margin-bottom:20px;border-left:4px solid #0066a0}.detail-header h1{font-size:1.5em;margin-bottom:10px;color:#005f96}.info-table{width:100%;border-collapse:collapse;margin:16px 0;background:#fff}.info-table th{text-align:left;padding:12px 14px;background:#f8f9fa;border:1px solid #d6dce1;width:150px;font-size:.9em;color:#394b59;vertical-align:top}.info-table td{padding:12px 14px;border:1px solid #d6dce1;font-size:.95em}.map-container{margin:16px 0;border-radius:8px;overflow:hidden;background:#fff;padding:4px}
+.stats-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:16px 0}.stat-box{background:#fff;border:1px solid #d6dce1;border-radius:8px;padding:14px 10px;text-align:center}.stat-box .num{font-size:1.8em;font-weight:bold;color:#005f96}.stat-box .label{font-size:.85em;color:#46535e;margin-top:2px}
+.search-box{margin:16px 0;padding:16px;background:#fff;border:1px solid #d6dce1;border-radius:8px}.search-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.button{border:0;border-radius:6px;background:#0066a0;color:#fff;min-height:44px;padding:9px 16px;font-weight:bold;cursor:pointer}.button-secondary{background:#fff;color:#005f96;border:2px solid #0066a0}.error{color:#a61b1b;font-weight:bold}.notice{padding:16px;border-left:4px solid #8a5a00;background:#fff8e6;margin:16px 0}.status-region{min-height:28px;margin-top:8px}
+main a{display:inline-flex;align-items:center;min-height:44px}
+footer{background:#263746;color:#fff;padding:32px 0;margin-top:40px;font-size:.9em}footer .footer-inner{max-width:1000px;margin:0 auto;padding:0 16px}footer a{color:#9bddff}footer .note{font-size:.9em;color:#e1e7eb;margin-top:12px;line-height:1.6}.footer-links{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:14px}.footer-links a{display:inline-flex;align-items:center;min-height:44px}.footer-bottom{margin-top:16px;padding-top:12px;border-top:1px solid #71808d;text-align:center;color:#e1e7eb;font-size:.85em}.portal-network{margin-top:20px;padding-top:16px;border-top:1px solid #71808d}.portal-network h3{font-size:.95em;color:#fff;margin-bottom:8px;font-weight:normal}.portal-network ul{list-style:none}.portal-network li{font-size:.9em;color:#e1e7eb;width:100%;margin:3px 0}
+@media(max-width:600px){.card-grid{grid-template-columns:1fr}header .header-inner{flex-direction:column;align-items:flex-start}.info-table th{width:105px;font-size:.85em;padding:8px}.info-table td{font-size:.9em;padding:8px}.hero h1{font-size:1.3em}.detail-header h1{font-size:1.2em}.stats-bar{gap:7px}.stat-box{padding:10px 4px}.stat-box .num{font-size:1.35em}.stat-box .label{font-size:.72em}.filter-bar{align-items:stretch}.filter-bar .count{width:100%;margin-left:0}}
 """
 
 # =============================================================
@@ -224,78 +178,16 @@ footer .note{font-size:0.8em;color:#bbb;margin-top:12px;line-height:1.6}
 
 SEARCH_JS = """\
 (function(){
-  // フィルタ機能（ページ内のカードを非表示/表示）
-  var cards = document.querySelectorAll('.clinic-card');
-  var qInput = document.getElementById('q-input');
-  var visitOnly = document.getElementById('filter-visit');
-  var hygOnly = document.getElementById('filter-hyg');
-  var countLabel = document.getElementById('count-label');
-  var total = cards.length;
-
-  function applyFilter(){
-    var q = qInput ? qInput.value.trim().toLowerCase() : '';
-    var v = visitOnly && visitOnly.checked;
-    var hy = hygOnly && hygOnly.checked;
-    var shown = 0;
-    cards.forEach(function(c){
-      var name = (c.dataset.name||'').toLowerCase();
-      var addr = (c.dataset.addr||'').toLowerCase();
-      var hasV = c.dataset.visit === '1';
-      var hasH = c.dataset.hyg === '1';
-      var ok = true;
-      if(q && name.indexOf(q)<0 && addr.indexOf(q)<0) ok = false;
-      if(v && !hasV) ok = false;
-      if(hy && !hasH) ok = false;
-      c.style.display = ok ? '' : 'none';
-      if(ok) shown++;
-    });
-    if(countLabel){
-      countLabel.textContent = shown + ' / ' + total + ' 件表示中';
-    }
-  }
-
-  if(qInput) qInput.addEventListener('input', applyFilter);
-  if(visitOnly) visitOnly.addEventListener('change', applyFilter);
-  if(hygOnly) hygOnly.addEventListener('change', applyFilter);
-  applyFilter();
-
-  // 検索JSON（他ページへのジャンプ用、都道府県ページのみ）
-  var input=document.getElementById('search-input');
-  var results=document.getElementById('search-results');
-  var data=[];
-  var prefCode=document.body.dataset.prefCode||'';
-  if(prefCode && input){
-    fetch('/data/search/'+prefCode+'.json')
-      .then(function(r){return r.json()})
-      .then(function(d){data=d})
-      .catch(function(){});
-    var timer;
-    input.addEventListener('input',function(){
-      clearTimeout(timer);
-      timer=setTimeout(function(){doSearch()},200);
-    });
-    function doSearch(){
-      var q=input.value.trim().toLowerCase();
-      if(q.length<2){results.innerHTML='';return;}
-      var hits=data.filter(function(o){
-        return(o.st||'').toLowerCase().indexOf(q)>=0;
-      }).slice(0,30);
-      if(!hits.length){results.innerHTML='<p style="color:#999;margin-top:8px">該当する歯科が見つかりません</p>';return;}
-      var html=hits.map(function(o){
-        var badges='';
-        if(o.v) badges += '<span class="badge badge-visit">訪問歯科対応</span>';
-        if(o.h) badges += '<span class="badge badge-hyg">歯科衛生士訪問</span>';
-        return '<div class="card" style="margin-bottom:8px"><h3><a href="/clinic/'+esc(o.slug)+'.html">'+esc(o.n)+'</a></h3>'
-          +'<div class="meta"><span class="addr">'+esc(o.a)+'</span>'
-          +(o.tel?'<span class="tel">TEL: '+esc(o.tel)+'</span>':'')
-          +'</div>'
-          +(badges?'<div class="badges">'+badges+'</div>':'')
-          +'</div>';
-      }).join('');
-      results.innerHTML=html;
-    }
-  }
+  var cards=document.querySelectorAll('.clinic-card'),qInput=document.getElementById('q-input'),includeAll=document.getElementById('filter-all'),hygOnly=document.getElementById('filter-hyg'),countLabel=document.getElementById('count-label'),total=cards.length;
+  function applyFilter(){var q=qInput?qInput.value.trim().toLowerCase():'',all=includeAll&&includeAll.checked,hy=hygOnly&&hygOnly.checked,shown=0;cards.forEach(function(c){var ok=(!q||(c.dataset.name||'').toLowerCase().indexOf(q)>=0||(c.dataset.addr||'').toLowerCase().indexOf(q)>=0)&&(all||c.dataset.status==='confirmed_yes')&&(!hy||c.dataset.hyg==='1');c.hidden=!ok;if(ok)shown++;});if(countLabel)countLabel.textContent=shown+' / '+total+' 件表示中'+(all?'（全掲載）':'（訪問歯科対応確認済み）');}
+  if(qInput)qInput.addEventListener('input',applyFilter);if(includeAll)includeAll.addEventListener('change',applyFilter);if(hygOnly)hygOnly.addEventListener('change',applyFilter);applyFilter();
+  var input=document.getElementById('search-input'),results=document.getElementById('search-results'),searchStatus=document.getElementById('search-status'),searchAll=document.getElementById('search-all'),retry=document.getElementById('search-retry'),data=[],loadState='idle',prefCode=document.body.dataset.prefCode||'',root=document.body.dataset.pageRoot||'';
   function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function status(msg,isError){if(!searchStatus)return;searchStatus.textContent=msg;searchStatus.className='status-region'+(isError?' error':'');}
+  function load(){loadState='loading';data=[];if(retry)retry.hidden=true;status('検索データを読み込んでいます…');return fetch(root+'data/search/'+prefCode+'.json').then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(d){if(!Array.isArray(d))throw new Error('invalid');data=d;loadState='ready';status('2文字以上入力すると検索します。');if(input.value.trim().length>=2)doSearch();}).catch(function(){loadState='error';status('検索データを読み込めませんでした。再試行するか、市区町村から探してください。',true);if(retry)retry.hidden=false;});}
+  if(prefCode&&input){load();if(retry)retry.addEventListener('click',load);if(searchAll)searchAll.addEventListener('change',function(){if(input.value.trim().length>=2)doSearch();});var timer;input.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(doSearch,200);});
+    function doSearch(){var q=input.value.trim().toLowerCase();if(q.length<2){results.innerHTML='';status('2文字以上入力すると検索します。');return;}if(loadState==='loading'){status('検索データを読み込んでいます…');return;}if(loadState==='error'){status('検索データを読み込めませんでした。再試行してください。',true);return;}var all=searchAll&&searchAll.checked;var hits=data.filter(function(o){return(all||o.s==='confirmed_yes')&&(o.st||'').toLowerCase().indexOf(q)>=0;}).slice(0,30);if(!hits.length){results.innerHTML='';status('条件に一致する歯科は見つかりませんでした。');return;}results.innerHTML=hits.map(function(o){var badges=o.s==='confirmed_yes'?'<span class="badge badge-visit">訪問歯科対応確認済み</span>':(o.s==='unknown'?'<span class="badge badge-unknown">訪問対応情報 未確認</span>':'<span class="badge badge-no">訪問歯科情報の掲載なし</span>');if(o.h)badges+='<span class="badge badge-hyg">歯科衛生士訪問</span>';return '<div class="card" style="margin-bottom:8px"><h3><a href="'+root+'clinic/'+encodeURIComponent(o.slug)+'.html">'+esc(o.n)+'</a></h3><div class="meta"><span class="addr">'+esc(o.a)+'</span>'+(o.tel?'<span class="tel">TEL: '+esc(o.tel)+'</span>':'')+'</div><div class="badges">'+badges+'</div></div>';}).join('');status(hits.length+'件を表示しています。');}
+  }
 })();
 """
 
@@ -303,454 +195,134 @@ SEARCH_JS = """\
 # HTML生成ヘルパー
 # =============================================================
 
-def make_head(title, desc, canonical, extra_head=''):
-    """<head> タグを生成"""
+def make_head(title, desc, canonical, depth=0, extra_head='', noindex=False):
     ga_tag = ''
     if GA4_ID:
         ga_tag = f'''<script async src="https://www.googletagmanager.com/gtag/js?id={GA4_ID}"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments)}}gtag('js',new Date());gtag('config','{GA4_ID}');</script>'''
-    return f"""<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>{h(title)}</title>
-  <meta name="description" content="{h(desc)}">
-  <link rel="canonical" href="{h(canonical)}">
-  <meta property="og:title" content="{h(title)}">
-  <meta property="og:description" content="{h(desc)}">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="{h(canonical)}">
-  <meta property="og:site_name" content="{h(SITE_NAME)}">
-  <meta property="og:locale" content="ja_JP">
-  <link rel="stylesheet" href="/static/style.css">
-  {ga_tag}
-{extra_head}
-</head>
-"""
+    robots = '<meta name="robots" content="noindex,follow">' if noindex else ''
+    return f'''<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{h(title)}</title><meta name="description" content="{h(desc)}"><link rel="canonical" href="{h(canonical)}">{robots}
+<meta property="og:title" content="{h(title)}"><meta property="og:description" content="{h(desc)}"><meta property="og:type" content="website"><meta property="og:url" content="{h(canonical)}"><meta property="og:site_name" content="{h(SITE_NAME)}"><meta property="og:locale" content="ja_JP">
+<link rel="stylesheet" href="{h(internal_url(depth, 'static/style.css'))}">{ga_tag}{extra_head}</head>'''
 
 
-def make_header():
-    return f"""<header>
-  <div class="header-inner">
-    <div>
-      <a href="/" class="site-title">{h(SITE_NAME)}</a>
-      <div class="site-subtitle">訪問歯科対応の歯科を探せるポータル</div>
-    </div>
-    <nav>
-      <a href="/about.html">このサイトについて</a>
-    </nav>
-  </div>
-</header>
-"""
+def make_header(depth=0):
+    return f'''<a class="skip-link" href="#main-content">本文へ移動</a><header><div class="header-inner"><div><a href="{h(internal_url(depth))}" class="site-title">{h(SITE_NAME)}</a><div class="site-subtitle">訪問歯科対応を確認できる歯科検索ポータル</div></div><nav aria-label="主要メニュー"><a href="{h(internal_url(depth, 'about.html'))}">このサイトについて</a></nav></div></header>'''
 
 
-def make_breadcrumb(items):
-    """パンくず生成。items = [(label, url), ...] 最後はリンクなし"""
-    parts = []
-    for i, (label, url) in enumerate(items):
-        if i == len(items) - 1:
-            parts.append(f'<span>{h(label)}</span>')
-        else:
-            parts.append(f'<a href="{h(url)}">{h(label)}</a>')
-    # JSON-LD BreadcrumbList
-    ld_items = []
-    for i, (label, url) in enumerate(items):
-        full_url = url if url.startswith('http') else f'{SITE_URL}{url}'
-        ld_items.append(f'{{"@type":"ListItem","position":{i+1},"name":"{h(label)}","item":"{h(full_url)}"}}')
-    json_ld = f'<script type="application/ld+json">{{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{",".join(ld_items)}]}}</script>'
-    return f'<nav class="breadcrumb">{" &gt; ".join(parts)}</nav>\n{json_ld}'
+def make_breadcrumb(items, depth=0):
+    parts=[]; ld_items=[]
+    for i,(label,path) in enumerate(items):
+        if i==len(items)-1: parts.append(f'<span aria-current="page">{h(label)}</span>')
+        else: parts.append(f'<a href="{h(internal_url(depth,path))}">{h(label)}</a>')
+        absolute = path if str(path).startswith('http') else f'{SITE_URL}/{str(path).lstrip("/")}'
+        ld_items.append({'@type':'ListItem','position':i+1,'name':label,'item':absolute})
+    ld={'@context':'https://schema.org','@type':'BreadcrumbList','itemListElement':ld_items}
+    return f'<nav class="breadcrumb" aria-label="パンくず">{" &gt; ".join(parts)}</nav><script type="application/ld+json">{json.dumps(ld,ensure_ascii=False)}</script>'
 
 
-def make_footer():
-    parent_line = ''
-    if PARENT_BRAND:
-        parent_line = f'<p class="note">{h(SITE_NAME)}は{h(PARENT_BRAND)}群の訪問歯科版です。</p>'
+def make_footer(depth=0):
+    network=''
     if PORTAL_NETWORK_LINKS:
-        items = '\n'.join(
-            f'        <li><a href="{h(link["href"])}">{h(link["anchor"])}</a> — {h(link["description"])}</li>'
-            for link in PORTAL_NETWORK_LINKS
-        )
-        portal_network_section = (
-            '<section class="portal-network" aria-labelledby="portal-network-heading">\n'
-            '      <h3 id="portal-network-heading">在宅ナビシリーズ</h3>\n'
-            '      <ul>\n'
-            f'{items}\n'
-            '      </ul>\n'
-            '    </section>'
-        )
-    else:
-        portal_network_section = ''
-    return f"""<footer>
-  <div class="footer-inner">
-    <p><strong>{h(SITE_NAME)}</strong> — 訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト</p>
-    {parent_line}
-    <p class="note">
-      情報は <a href="{h(ATTRIBUTION_URL)}" target="_blank" rel="noopener">{h(ATTRIBUTION)}</a> をもとに作成しています。<br>
-      実際のサービス提供内容・料金・対応可否については各歯科診療所に直接ご確認ください。
-    </p>
-    {portal_network_section}
-    <div class="footer-bottom">&copy; 2025 {h(SITE_NAME)} ({h(OPERATOR_NAME)})</div>
-  </div>
-</footer>
-</body></html>
-"""
+        items=''.join(f'<li><a href="{h(x["href"])}">{h(x["anchor"])}</a> — {h(x["description"])}</li>' for x in PORTAL_NETWORK_LINKS)
+        network=f'<section class="portal-network" aria-labelledby="network-title"><h3 id="network-title">在宅ナビシリーズ</h3><ul>{items}</ul></section>'
+    operator = f'<a href="{h(OPERATOR_URL)}" target="_blank" rel="noopener">{h(OPERATOR_NAME)}</a>' if OPERATOR_URL else h(OPERATOR_NAME)
+    return f'''<footer><div class="footer-inner"><p><strong>{h(SITE_NAME)}</strong> — 神奈川県の歯科情報と訪問歯科対応の確認状況を探せるポータルサイト</p>
+<p class="note">情報は <a href="{h(ATTRIBUTION_URL)}" target="_blank" rel="noopener">{h(ATTRIBUTION)}</a> をもとに作成しています。データ取得基準日は確認中です。データファイル初回収録日: {h(DATA_RECORDED_DATE)}。実際の対応可否・料金は各歯科へ直接ご確認ください。</p>
+<nav class="footer-links" aria-label="サイト情報"><a href="{h(internal_url(depth,'about.html'))}">このサイトについて</a><a href="{h(internal_url(depth,'privacy.html'))}">プライバシー</a><a href="{h(internal_url(depth,'terms.html'))}">利用規約</a><a href="{h(internal_url(depth,'contact.html'))}">お問い合わせ</a></nav>{network}
+<div class="footer-bottom">&copy; 2026 {h(SITE_NAME)}（運営: {operator}）</div></div></footer></body></html>'''
 
 
-def make_clinic_card(c):
-    """歯科カード（一覧用）"""
-    cid = clinic_slug(c['clinic_id'])
-    name = c.get('name', '')
-    addr = c.get('address', '')
-    tel = c.get('tel', '')
-    specs = c.get('specialties', [])
-    has_v = c.get('has_visiting_dental', False)
-    has_h = c.get('has_hygienist_visit', False)
+def status_badge(c):
+    status=visiting_status(c)
+    if status=='confirmed_yes': return '<span class="badge badge-visit">訪問歯科対応確認済み</span>'
+    if status=='unknown': return '<span class="badge badge-unknown">訪問対応情報 未確認</span>'
+    return '<span class="badge badge-no">訪問歯科情報の掲載なし</span>'
 
-    badges = ''
-    if has_v:
-        badges += '<span class="badge badge-visit">訪問歯科対応</span>'
-    if has_h:
-        badges += '<span class="badge badge-hyg">歯科衛生士訪問</span>'
 
-    specs_html = ''
-    if specs:
-        specs_html = '<div class="specs">' + ' / '.join(h(s) for s in specs[:5]) + '</div>'
-
-    tel_html = f'<span class="tel">TEL: {h(tel)}</span>' if tel else ''
-
-    return f'''<div class="card clinic-card" data-name="{h(name)}" data-addr="{h(addr)}" data-visit="{1 if has_v else 0}" data-hyg="{1 if has_h else 0}">
-  <h3><a href="/clinic/{cid}.html">{h(name)}</a></h3>
-  <div class="meta">
-    <span class="addr">{h(addr)}</span>
-    {tel_html}
-  </div>
-  {specs_html}
-  {f'<div class="badges">{badges}</div>' if badges else ''}
-</div>
-'''
-
+def make_clinic_card(c, depth):
+    cid=clinic_slug(c['clinic_id']);name=c.get('name','');addr=c.get('address','');tel=c.get('tel','');specs=c.get('specialties',[]);has_h=c.get('has_hygienist_visit',False);status=visiting_status(c)
+    specs_html='<div class="specs">'+' / '.join(h(s) for s in specs[:5])+'</div>' if specs else ''
+    tel_html=f'<span class="tel">TEL: {h(tel)}</span>' if tel else ''
+    hyg='<span class="badge badge-hyg">歯科衛生士訪問</span>' if has_h else ''
+    return f'''<article class="card clinic-card" data-name="{h(name)}" data-addr="{h(addr)}" data-status="{status}" data-hyg="{1 if has_h else 0}"><h3><a href="{h(internal_url(depth,f'clinic/{cid}.html'))}">{h(name)}</a></h3><div class="meta"><span class="addr">{h(addr)}</span>{tel_html}</div>{specs_html}<div class="badges">{status_badge(c)}{hyg}</div></article>'''
 
 # =============================================================
 # ページ生成関数
 # =============================================================
 
-def build_index(clinics, pref_name, visiting_count):
-    """神奈川県トップページ（MVPなので都道府県トップ = サイトトップ）"""
-    total = len(clinics)
-    title = f'{SITE_NAME}｜{pref_name}の訪問歯科対応の歯科{total:,}件'
-    desc = f'{pref_name}の歯科診療所{total:,}件を掲載。うち訪問歯科対応{visiting_count:,}件。市区町村から検索できます。寝たきり・通院困難な方向け。'
-    canonical = f'{SITE_URL}/'
-
-    # 市区町村別
-    cities = defaultdict(list)
-    for c in clinics:
-        cities[c['city']].append(c)
-    city_items = sorted(cities.items(), key=lambda x: -len(x[1]))
-
-    city_html = '<div class="city-grid">'
-    for cname, clist in city_items:
-        cslug = city_slug(cname)
-        city_html += f'<a href="/pref/kanagawa/{cslug}.html" class="city-link">{h(cname)}<span class="count">({len(clist)})</span></a>'
-    city_html += '</div>'
-
-    body = f"""<body data-pref-code="14">
-{make_header()}
-<div class="container">
-  <div class="hero">
-    <h1>{h(pref_name)}の訪問歯科対応の歯科を探す</h1>
-    <p>寝たきりや通院困難な方のための <strong>{CARE_TYPE}</strong> に対応している歯科診療所を市区町村から検索できます。</p>
-    <p>ケアマネジャー・介護施設スタッフ・ご家族の方の歯科探しをサポートします。</p>
-  </div>
-
-  <div class="stats-bar">
-    <div class="stat-box"><div class="num">{total:,}</div><div class="label">掲載歯科数</div></div>
-    <div class="stat-box"><div class="num">{visiting_count:,}</div><div class="label">訪問歯科対応</div></div>
-    <div class="stat-box"><div class="num">{len(cities)}</div><div class="label">市区町村</div></div>
-  </div>
-
-  <div class="search-box">
-    <input type="text" id="search-input" placeholder="{h(pref_name)}の歯科を検索（名称・住所）">
-    <div id="search-results"></div>
-  </div>
-
-  <p style="margin:16px 0"><a href="/nearby.html" class="city-link" style="display:inline-block;font-weight:bold">📍 現在地から近い歯科を探す</a></p>
-
-  <h2 style="margin-top:28px;font-size:1.15em">市区町村から探す</h2>
-  {city_html}
-
-  <p style="margin-top:20px;font-size:0.9em;color:#666">
-    ※ 訪問歯科対応の判定は医療情報ネット（厚生労働省）に登録されている情報に基づきます。
-    実際の対応可否・料金については各歯科診療所に直接お問い合わせください。
-  </p>
-</div>
-{make_footer()}"""
-
-    extra = '<script src="/static/search.js" defer></script>'
-    return make_head(title, desc, canonical, extra) + body
-
-
-def build_pref_page(clinics, pref_name, visiting_count):
-    """都道府県ページ（神奈川県）— indexと同じ内容だが別URLで配信"""
-    return build_index(clinics, pref_name, visiting_count)
+def build_index(clinics, pref_name, visiting_count, depth=0, canonical_path=''):
+    total=len(clinics);unknown=sum(1 for c in clinics if visiting_status(c)=='unknown');cities=defaultdict(list)
+    for c in clinics:cities[c['city']].append(c)
+    title=f'{SITE_NAME}｜{pref_name}の訪問歯科対応確認済み{visiting_count:,}件'
+    desc=f'{pref_name}の歯科{total:,}件を掲載。訪問歯科対応確認済み{visiting_count:,}件、訪問対応情報未確認{unknown:,}件。市区町村・名称・住所から検索できます。'
+    canonical=f'{SITE_URL}/{canonical_path}'
+    city_html='<div class="city-grid">'
+    for cname,clist in sorted(cities.items(),key=lambda x:-sum(1 for c in x[1] if visiting_status(c)=='confirmed_yes')):
+        yes=sum(1 for c in clist if visiting_status(c)=='confirmed_yes');city_html+=f'<a href="{h(internal_url(depth,f"pref/kanagawa/{city_slug(cname)}.html"))}" class="city-link">{h(cname)}<span class="count">対応確認済み {yes}</span></a>'
+    city_html+='</div>'
+    body=f'''<body data-pref-code="14" data-page-root="{h(page_root(depth))}" data-default-status="confirmed_yes">{make_header(depth)}<main id="main-content" class="container"><div class="hero"><h1>{h(pref_name)}の訪問歯科対応を確認できる歯科を探す</h1><p>初期表示は、医療情報ネットで歯科訪問診療の情報を確認できた<strong>{visiting_count:,}件</strong>です。全掲載<strong>{total:,}件</strong>も明示的に切り替えて検索できます。</p></div>
+<div class="stats-bar"><div class="stat-box"><div class="num">{total:,}</div><div class="label">全掲載歯科</div></div><div class="stat-box"><div class="num">{visiting_count:,}</div><div class="label">訪問対応確認済み</div></div><div class="stat-box"><div class="num">{unknown:,}</div><div class="label">訪問対応情報 未確認</div></div></div>
+<section class="search-box" aria-labelledby="search-heading"><h2 id="search-heading" style="font-size:1.15em">名称・住所から探す</h2><label class="field-label" for="search-input">歯科名または住所</label><input class="text-input" type="search" id="search-input" autocomplete="off"><p class="help">2文字以上入力してください。初期設定では訪問歯科対応確認済みのみ検索します。</p><label class="check-label"><input type="checkbox" id="search-all" aria-label="全掲載歯科から検索">対応情報未確認・訪問歯科情報の掲載なしを含む全歯科から検索</label><div id="search-status" class="status-region" role="status" aria-live="polite">検索データを読み込んでいます…</div><button id="search-retry" class="button button-secondary" type="button" hidden>再試行</button><div id="search-results" aria-live="polite"></div></section>
+<h2 style="margin-top:28px;font-size:1.15em">市区町村から探す</h2><p class="help">件数は訪問歯科対応を確認できた歯科です。市区町村ページで全掲載への切替ができます。</p>{city_html}
+<p class="notice">「対応確認済み」は情報掲載を示すもので、現在の訪問可否・訪問範囲を保証しません。実際の対応可否・料金は各歯科に直接ご確認ください。</p></main>{make_footer(depth)}'''
+    extra=f'<script src="{h(internal_url(depth,"static/search.js"))}" defer></script>'
+    return make_head(title,desc,canonical,depth,extra)+body
 
 
 def build_city_page(city_name, clinics_in_city, pref_name):
-    """市区町村ページ"""
-    cslug = city_slug(city_name)
-    n = len(clinics_in_city)
-    visiting_n = sum(1 for c in clinics_in_city if c.get('has_visiting_dental'))
-    title = f'{city_name}（{pref_name}）の訪問歯科対応の歯科一覧（{n}件）| {SITE_NAME}'
-    desc = f'{pref_name}{city_name}の歯科診療所{n}件を掲載。うち訪問歯科対応{visiting_n}件。住所・電話番号・対応サービスを掲載。'
-    canonical = f'{SITE_URL}/pref/kanagawa/{cslug}.html'
-
-    bc = make_breadcrumb([
-        ('トップ', '/'),
-        (pref_name, '/pref/kanagawa.html'),
-        (city_name, ''),
-    ])
-
-    # 訪問歯科対応を優先表示（ソート）
-    sorted_clinics = sorted(
-        clinics_in_city,
-        key=lambda c: (
-            not c.get('has_visiting_dental'),  # Trueを先に
-            not c.get('has_hygienist_visit'),
-            c.get('name', ''),
-        ),
-    )
-    cards = ''.join(make_clinic_card(c) for c in sorted_clinics)
-
-    body = f"""<body>
-{make_header()}
-{bc}
-<div class="container">
-  <div class="hero">
-    <h1>{h(city_name)}（{h(pref_name)}）の歯科診療所</h1>
-    <p>{h(city_name)}には歯科診療所が<strong>{n}件</strong>あり、うち<strong>{visiting_n}件</strong>が訪問歯科に対応しています。</p>
-  </div>
-
-  <div class="filter-bar">
-    <input type="text" id="q-input" placeholder="名前・住所で絞り込み" style="flex:1;min-width:200px;padding:6px 10px;border:1px solid #ccc;border-radius:4px">
-    <label><input type="checkbox" id="filter-visit">訪問歯科対応のみ</label>
-    <label><input type="checkbox" id="filter-hyg">歯科衛生士訪問あり</label>
-    <span class="count" id="count-label">{n} 件表示中</span>
-  </div>
-
-  <div class="card-grid">
-    {cards}
-  </div>
-
-  <p style="margin-top:24px"><a href="/pref/kanagawa.html">&larr; {h(pref_name)}の歯科一覧に戻る</a></p>
-</div>
-{make_footer()}"""
-
-    extra = '<script src="/static/search.js" defer></script>'
-    # JSON-LD: ItemList
-    items_ld = []
-    for i, c in enumerate(sorted_clinics[:20], 1):
-        items_ld.append(f'{{"@type":"ListItem","position":{i},"url":"{SITE_URL}/clinic/{clinic_slug(c["clinic_id"])}.html","name":"{h(c.get("name",""))}"}}')
-    collection_ld = f'<script type="application/ld+json">{{"@context":"https://schema.org","@type":"ItemList","numberOfItems":{n},"itemListElement":[{",".join(items_ld)}]}}</script>'
-    extra += '\n  ' + collection_ld
-    return make_head(title, desc, canonical, extra) + body
+    depth=2;n=len(clinics_in_city);visiting_n=sum(1 for c in clinics_in_city if visiting_status(c)=='confirmed_yes');unknown_n=sum(1 for c in clinics_in_city if visiting_status(c)=='unknown');cslug=city_slug(city_name)
+    title=f'{city_name}（{pref_name}）の訪問歯科対応確認済み{visiting_n}件 | {SITE_NAME}';desc=f'{pref_name}{city_name}の歯科{n}件。訪問歯科対応確認済み{visiting_n}件、訪問対応情報未確認{unknown_n}件。'
+    sorted_clinics=sorted(clinics_in_city,key=lambda c:({'confirmed_yes':0,'unknown':1,'confirmed_no':2}[visiting_status(c)],not c.get('has_hygienist_visit'),c.get('name','')));cards=''.join(make_clinic_card(c,depth) for c in sorted_clinics)
+    bc=make_breadcrumb([('トップ',''),(pref_name,'pref/kanagawa.html'),(city_name,'')],depth)
+    body=f'''<body data-page-root="{page_root(depth)}" data-default-status="confirmed_yes">{make_header(depth)}{bc}<main id="main-content" class="container"><div class="hero"><h1>{h(city_name)}の訪問歯科対応を確認できる歯科</h1><p>全掲載<strong>{n}件</strong>、訪問歯科対応確認済み<strong>{visiting_n}件</strong>、訪問対応情報未確認<strong>{unknown_n}件</strong>です。初期表示は対応確認済みのみです。</p></div>
+<div class="filter-bar"><div style="flex:1;min-width:220px"><label class="field-label" for="q-input">名前・住所で絞り込み</label><input class="text-input" type="search" id="q-input"></div><label><input type="checkbox" id="filter-all" aria-label="全掲載を表示">全掲載を表示</label><label><input type="checkbox" id="filter-hyg" aria-label="歯科衛生士訪問あり">歯科衛生士訪問あり</label><span class="count" id="count-label" role="status" aria-live="polite"></span></div><div class="card-grid">{cards}</div><p><a href="{h(internal_url(depth,'pref/kanagawa.html'))}">&larr; {h(pref_name)}の一覧に戻る</a></p></main>{make_footer(depth)}'''
+    items=[{'@type':'ListItem','position':i,'url':f'{SITE_URL}/clinic/{clinic_slug(c["clinic_id"])}.html','name':c.get('name','')} for i,c in enumerate(sorted_clinics[:20],1)]
+    extra=f'<script src="{h(internal_url(depth,"static/search.js"))}" defer></script><script type="application/ld+json">{json.dumps({"@context":"https://schema.org","@type":"ItemList","numberOfItems":n,"itemListElement":items},ensure_ascii=False)}</script>'
+    return make_head(title,desc,f'{SITE_URL}/pref/kanagawa/{cslug}.html',depth,extra)+body
 
 
-def build_clinic_page(c, pref_name):
-    """歯科詳細ページ"""
-    cid = clinic_slug(c['clinic_id'])
-    name = c.get('name', '')
-    city = c.get('city', '')
-    cslug = city_slug(city)
-    addr = c.get('address', '')
-    postal = c.get('postal', '')
-    tel = c.get('tel', '')
-    url = c.get('url', '')
-    specs = c.get('specialties', [])
-    has_v = c.get('has_visiting_dental', False)
-    has_h = c.get('has_hygienist_visit', False)
-    source_url = c.get('source_url', '')
-    lat = c.get('latitude')
-    lng = c.get('longitude')
-
-    title_parts = [name, f'{city}（{pref_name}）']
-    if has_v:
-        title_parts.append(CARE_TYPE + '対応')
-    title = '｜'.join(title_parts) + f' | {SITE_NAME}'
-
-    desc_parts = [f'{name}は{pref_name}{city}の歯科診療所です']
-    if addr:
-        desc_parts.append(addr)
-    if tel:
-        desc_parts.append(f'電話{tel}')
-    if has_v:
-        desc_parts.append('訪問歯科対応')
-    desc = '。'.join(desc_parts) + '。'
-
-    canonical = f'{SITE_URL}/clinic/{cid}.html'
-
-    bc = make_breadcrumb([
-        ('トップ', '/'),
-        (pref_name, '/pref/kanagawa.html'),
-        (city, f'/pref/kanagawa/{cslug}.html'),
-        (name, ''),
-    ])
-
-    # バッジ
-    badges_html = ''
-    if has_v:
-        badges_html += '<span class="badge badge-visit">訪問歯科対応</span> '
-    if has_h:
-        badges_html += '<span class="badge badge-hyg">歯科衛生士訪問</span> '
-    if badges_html:
-        badges_html = f'<div class="badges">{badges_html}</div>'
-
-    # 情報テーブル
-    rows = []
-
-    def add_row(label, val):
-        if val:
-            rows.append(f'<tr><th>{h(label)}</th><td>{val}</td></tr>')
-
-    add_row('歯科名', h(name))
-    if postal:
-        add_row('郵便番号', f'〒{h(postal)}')
-    add_row('住所', h(addr))
-    if tel:
-        add_row('電話番号', f'<a href="tel:{h(tel)}">{h(tel)}</a>')
-    if url:
-        add_row('公式サイト', f'<a href="{h(url)}" target="_blank" rel="noopener">{h(url)}</a>')
-    if specs:
-        specs_html = ' '.join(f'<span class="badge badge-specialty">{h(s)}</span>' for s in specs)
-        add_row('診療科目', specs_html)
-
-    visit_status = []
-    if has_v:
-        visit_status.append('歯科訪問診療に対応')
-    if has_h:
-        visit_status.append('訪問歯科衛生指導に対応')
-    if visit_status:
-        add_row('訪問対応', '<br>'.join(visit_status))
-
-    if source_url:
-        add_row('情報出典', f'<a href="{h(source_url)}" target="_blank" rel="noopener">医療情報ネットで見る</a>')
-
-    table_html = f'<table class="info-table">{"".join(rows)}</table>'
-
-    # 地図
-    map_html = ''
-    if lat and lng:
-        map_html = f'''<div class="map-container">
-  <iframe width="100%" height="320" frameborder="0" style="border:0"
-    src="https://www.openstreetmap.org/export/embed.html?bbox={lng - 0.005},{lat - 0.003},{lng + 0.005},{lat + 0.003}&layer=mapnik&marker={lat},{lng}"
-    loading="lazy" title="{h(name)}の地図"></iframe>
-  <p style="font-size:0.8em;color:#888;margin-top:4px;padding:0 8px 8px">
-    <a href="https://www.google.com/maps?q={lat},{lng}" target="_blank" rel="noopener">Google Mapsで見る</a>
-  </p>
-</div>'''
-
-    # JSON-LD (Dentist)
-    json_ld_data = {
-        "@context": "https://schema.org",
-        "@type": "Dentist",
-        "name": name,
-        "address": {
-            "@type": "PostalAddress",
-            "addressRegion": pref_name,
-            "addressLocality": city,
-            "streetAddress": addr,
-            "postalCode": postal,
-            "addressCountry": "JP",
-        },
-    }
-    if tel:
-        json_ld_data["telephone"] = tel
-    if url:
-        json_ld_data["url"] = url
-    if lat and lng:
-        json_ld_data["geo"] = {"@type": "GeoCoordinates", "latitude": lat, "longitude": lng}
-    if specs:
-        json_ld_data["medicalSpecialty"] = specs
-    if has_v:
-        json_ld_data["availableService"] = [{"@type": "MedicalProcedure", "name": "歯科訪問診療"}]
-
-    json_ld_tag = f'<script type="application/ld+json">{json.dumps(json_ld_data, ensure_ascii=False)}</script>'
-
-    body = f"""<body>
-{make_header()}
-{bc}
-<div class="container">
-  <div class="detail-header">
-    <h1>{h(name)}</h1>
-    <p style="color:#666;font-size:0.95em">{h(pref_name)} {h(city)}</p>
-    {badges_html}
-  </div>
-
-  {table_html}
-  {map_html}
-
-  <div style="margin-top:24px;display:flex;gap:16px;flex-wrap:wrap">
-    <a href="/pref/kanagawa/{cslug}.html">&larr; {h(city)}の歯科一覧</a>
-    <a href="/pref/kanagawa.html">&larr; {h(pref_name)}の歯科一覧</a>
-  </div>
-
-  <p style="margin-top:20px;font-size:0.85em;color:#888;padding:12px;background:#f8f9fa;border-radius:6px">
-    ※ 掲載情報は医療情報ネット（厚生労働省）をもとに作成しています。
-    実際の診療内容・対応可否・料金については必ず {h(name)} に直接お問い合わせください。
-    情報が古い場合がありますのでご了承ください。
-  </p>
-</div>
-{make_footer()}"""
-
-    return make_head(title, desc, canonical, json_ld_tag) + body
+def build_clinic_page(c,pref_name):
+    depth=1;cid=clinic_slug(c['clinic_id']);name=c.get('name','');city=c.get('city','');addr=c.get('address','');postal=c.get('postal','');tel=c.get('tel','');url=c.get('url','');specs=c.get('specialties',[]);source_url=c.get('source_url','');lat=c.get('latitude');lng=c.get('longitude');status=visiting_status(c);has_h=c.get('has_hygienist_visit',False)
+    title=f'{name}｜{city}（{pref_name}） | {SITE_NAME}';desc=f'{name}は{pref_name}{city}の歯科診療所です。訪問歯科情報の確認状態、住所、電話番号を掲載。';canonical=f'{SITE_URL}/clinic/{cid}.html';bc=make_breadcrumb([('トップ',''),(pref_name,'pref/kanagawa.html'),(city,f'pref/kanagawa/{city_slug(city)}.html'),(name,'')],depth)
+    rows=[]
+    def add(label,val):
+        if val:rows.append(f'<tr><th>{h(label)}</th><td>{val}</td></tr>')
+    add('歯科名',h(name));add('郵便番号',f'〒{h(postal)}' if postal else '');add('住所',h(addr));add('電話番号',f'<a href="tel:{h(tel)}">{h(tel)}</a>' if tel else '');add('公式サイト',f'<a href="{h(url)}" target="_blank" rel="noopener">公式サイトを見る</a>' if url else '');add('診療科目',' '.join(f'<span class="badge badge-specialty">{h(s)}</span>' for s in specs));status_text={'confirmed_yes':'医療情報ネットで歯科訪問診療の情報を確認','confirmed_no':'医療情報ネットの取得情報に歯科訪問診療の掲載なし','unknown':'詳細情報を取得できず、訪問対応情報は未確認'}[status];add('訪問歯科情報',status_text);add('歯科衛生士訪問','医療情報ネットで訪問歯科衛生指導の情報を確認' if has_h else '');add('情報出典',f'<a href="{h(source_url)}" target="_blank" rel="noopener">医療情報ネットで見る</a>' if source_url else '')
+    badges=status_badge(c)+(('<span class="badge badge-hyg">歯科衛生士訪問</span>') if has_h else '')
+    map_html=''
+    if lat and lng:map_html=f'<div class="map-container"><iframe width="100%" height="320" style="border:0" src="https://www.openstreetmap.org/export/embed.html?bbox={lng-0.005},{lat-0.003},{lng+0.005},{lat+0.003}&amp;layer=mapnik&amp;marker={lat},{lng}" loading="lazy" title="{h(name)}の地図"></iframe><p><a href="https://www.google.com/maps?q={lat},{lng}" target="_blank" rel="noopener">Google Mapsで見る</a></p></div>'
+    ld={'@context':'https://schema.org','@type':'Dentist','name':name,'address':{'@type':'PostalAddress','addressRegion':pref_name,'addressLocality':city,'streetAddress':addr,'postalCode':postal,'addressCountry':'JP'}}
+    if tel:ld['telephone']=tel
+    if url:ld['url']=url
+    body=f'''<body data-page-root="{page_root(depth)}" data-default-status="confirmed_yes">{make_header(depth)}{bc}<main id="main-content" class="container"><div class="detail-header"><h1>{h(name)}</h1><p>{h(pref_name)} {h(city)}</p><div class="badges">{badges}</div></div><table class="info-table">{"".join(rows)}</table>{map_html}<p><a href="{h(internal_url(depth,f'pref/kanagawa/{city_slug(city)}.html'))}">&larr; {h(city)}の一覧</a></p><p class="notice">掲載情報は医療情報ネットをもとに作成しています。データ取得基準日は確認中です。データファイル初回収録日: {h(DATA_RECORDED_DATE)}。現在の診療内容・訪問可否・料金は必ず歯科へ直接お問い合わせください。</p></main>{make_footer(depth)}'''
+    return make_head(title,desc,canonical,depth,f'<script type="application/ld+json">{json.dumps(ld,ensure_ascii=False)}</script>')+body
 
 
-def build_about_page(total, visiting):
-    """運営者情報・サイトについて"""
-    title = f'このサイトについて | {SITE_NAME}'
-    desc = f'{SITE_NAME}の運営者情報とデータ出典について。'
-    canonical = f'{SITE_URL}/about.html'
-    bc = make_breadcrumb([('トップ', '/'), ('このサイトについて', '')])
+def build_about_page(total,visiting,unknown):
+    depth=0;bc=make_breadcrumb([('トップ',''),('このサイトについて','')],depth)
+    body=f'''<body data-page-root="">{make_header(depth)}{bc}<main id="main-content" class="container"><h1>このサイトについて</h1><p>{h(SITE_NAME)}は、神奈川県の歯科情報から訪問歯科対応の確認状況を探せるポータルサイトです。</p><h2>掲載情報</h2><table class="info-table"><tr><th>運営者</th><td><a href="{h(OPERATOR_URL)}" target="_blank" rel="noopener">{h(OPERATOR_NAME)}</a></td></tr><tr><th>全掲載</th><td>{total:,}件</td></tr><tr><th>訪問歯科対応確認済み</th><td>{visiting:,}件</td></tr><tr><th>訪問対応情報 未確認</th><td>{unknown:,}件</td></tr><tr><th>データ出典</th><td><a href="{h(ATTRIBUTION_URL)}" target="_blank" rel="noopener">{h(ATTRIBUTION)}</a></td></tr><tr><th>データ取得基準日</th><td>確認中</td></tr><tr><th>データファイル初回収録日</th><td>{h(DATA_RECORDED_DATE)}</td></tr></table><h2>表示の意味</h2><p>「対応確認済み」は医療情報ネットに歯科訪問診療の情報が掲載されている状態です。「情報の掲載なし」と「詳細情報を取得できず未確認」は区別して表示します。いずれも現在の訪問可否を保証しません。</p><h2>訂正のご連絡</h2><p>掲載情報の訂正は<a href="{h(internal_url(depth,'contact.html'))}">お問い合わせ案内</a>から運営者へご連絡ください。</p></main>{make_footer(depth)}'''
+    return make_head(f'このサイトについて | {SITE_NAME}',f'{SITE_NAME}の運営者、掲載件数、データ出典、表示の意味。',f'{SITE_URL}/about.html',depth)+body
 
-    body = f"""<body>
-{make_header()}
-{bc}
-<div class="container">
-  <h1>このサイトについて</h1>
 
-  <h2 style="margin-top:24px;font-size:1.15em;color:#0066a0">{h(SITE_NAME)}とは</h2>
-  <p style="margin-top:8px">
-    {h(SITE_NAME)}は、訪問歯科に対応している歯科診療所を都道府県・市区町村から探せるポータルサイトです。
-    寝たきり、通院困難な高齢者、介護施設入居者向けの歯科訪問診療を行っている歯科を掲載しています。
-  </p>
+def build_nearby_page(total,geo_count,coverage_enabled):
+    depth=0
+    if coverage_enabled:
+        raise RuntimeError('位置情報カバレッジが公開閾値に達しました。現在地検索を実装・再レビューしてから公開してください。')
+    body=f'''<body data-page-root="">{make_header(depth)}<main id="main-content" class="container"><div class="hero"><h1>現在地から探す機能は現在ご利用いただけません</h1><p>全掲載{total:,}件のうち、距離検索に必要な位置情報を確認できているのは{geo_count:,}件のみです。検索結果を十分に案内できないため、現在地の取得は行いません。</p></div><p class="notice">現在地はブラウザから取得せず、本サイトのサーバーにも送信しません。市区町村からお探しください。</p><a class="city-link" href="{h(internal_url(depth))}">市区町村から探す</a></main>{make_footer(depth)}'''
+    return make_head(f'現在地検索は利用できません | {SITE_NAME}','現在地検索は現在利用できません。市区町村からお探しください。',f'{SITE_URL}/nearby.html',depth,noindex=True)+body
 
-  <h2 style="margin-top:24px;font-size:1.15em;color:#0066a0">掲載情報</h2>
-  <table class="info-table">
-    <tr><th>サイト名</th><td>{h(SITE_NAME)}</td></tr>
-    <tr><th>運営者</th><td>{h(OPERATOR_NAME)}</td></tr>
-    <tr><th>掲載地域</th><td>神奈川県（パイロット版）</td></tr>
-    <tr><th>掲載件数</th><td>{total:,}件</td></tr>
-    <tr><th>訪問歯科対応</th><td>{visiting:,}件</td></tr>
-    <tr><th>データ出典</th><td><a href="{h(ATTRIBUTION_URL)}" target="_blank" rel="noopener">{h(ATTRIBUTION)}</a></td></tr>
-  </table>
 
-  <h2 style="margin-top:24px;font-size:1.15em;color:#0066a0">ご利用にあたって</h2>
-  <p style="margin-top:8px">
-    掲載されている情報は医療情報ネット（厚生労働省）に登録されている内容をもとに作成しています。
-    情報は随時更新されますが、実際のサービス内容・対応可否・料金については各歯科診療所に直接ご確認ください。
-    情報の正確性については万全を期していますが、ご利用の際は各歯科に最新情報をお問い合わせください。
-  </p>
-
-  <h2 style="margin-top:24px;font-size:1.15em;color:#0066a0">訪問歯科対応の判定</h2>
-  <p style="margin-top:8px">
-    「訪問歯科対応」バッジは、医療情報ネットの詳細ページで <strong>歯科訪問診療</strong> の情報が掲載されている歯科に付与しています。
-    「歯科衛生士訪問」バッジは、同じく <strong>訪問歯科衛生指導</strong> の情報が掲載されている歯科に付与しています。
-  </p>
-
-  <p style="margin-top:24px"><a href="/">&larr; トップに戻る</a></p>
-</div>
-{make_footer()}"""
-    return make_head(title, desc, canonical) + body
-
+def build_trust_page(kind):
+    depth=0
+    data={
+      'privacy':('プライバシーについて','当サイトはGoogle Analytics 4（GA4）を利用し、閲覧状況を計測します。Googleによるデータの取扱いはGoogleの規約・ポリシーをご確認ください。現在地検索は停止中で、ブラウザの正確な位置情報を当サイトのサーバーへ送信しません。運営者のプライバシーポリシーもご確認ください。',f'<a href="{h(OPERATOR_PRIVACY_URL)}" target="_blank" rel="noopener">運営者のプライバシーポリシー</a>'),
+      'terms':('ご利用にあたって','掲載情報は医療情報ネットをもとに作成していますが、現在の診療内容、訪問可否、訪問範囲、料金を保証するものではありません。利用前に各歯科へ直接ご確認ください。',f'<a href="{h(internal_url(depth,"about.html"))}">掲載情報と表示の意味</a>'),
+      'contact':('お問い合わせ','掲載情報の訂正や当サイトへのお問い合わせは、運営者MDX株式会社の公式お問い合わせ窓口をご利用ください。',f'<a href="{h(OPERATOR_CONTACT_URL)}" target="_blank" rel="noopener">MDX株式会社のお問い合わせ窓口</a>')}
+    title,text,link=data[kind];body=f'''<body data-page-root="">{make_header(depth)}{make_breadcrumb([('トップ',''),(title,'')],depth)}<main id="main-content" class="container"><h1>{title}</h1><p>{text}</p><p style="margin-top:20px">{link}</p></main>{make_footer(depth)}'''
+    return make_head(f'{title} | {SITE_NAME}',text,f'{SITE_URL}/{kind}.html',depth)+body
 
 # =============================================================
 # JSON生成
@@ -772,6 +344,7 @@ def generate_search_json(clinics, path):
             'a': c.get('address', ''),
             'tel': c.get('tel', ''),
             'v': 1 if c.get('has_visiting_dental') else 0,
+            's': visiting_status(c),
             'h': 1 if c.get('has_hygienist_visit') else 0,
             'st': search_text,
         })
@@ -797,6 +370,7 @@ def generate_geo_json(clinics, path):
                 'lt': round(lat, 5),
                 'lg': round(lng, 5),
                 'v': 1 if c.get('has_visiting_dental') else 0,
+                's': visiting_status(c),
             })
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -805,172 +379,20 @@ def generate_geo_json(clinics, path):
     return len(geo)
 
 
-NEARBY_JS = r"""
-(function() {
-  var R = 6371;
-  var MAX_RESULTS = 20;
-
-  function haversine(lat1, lng1, lat2, lng2) {
-    var dLat = (lat2 - lat1) * Math.PI / 180;
-    var dLng = (lng2 - lng1) * Math.PI / 180;
-    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  }
-
-  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
-
-  function renderCard(c) {
-    var badge = c.v ? '<span class="specs">訪問歯科対応</span>' : '';
-    return '<div class="card" style="margin-bottom:8px">' +
-      '<h3><a href="/clinic/' + esc(c.id) + '.html">' + esc(c.n) + '</a></h3>' +
-      '<div class="meta">' +
-      '<span class="addr">' + esc(c.a) + '</span>' +
-      '<span class="tel">📍 現在地から約 ' + c._dist.toFixed(1) + 'km</span>' +
-      badge +
-      '</div></div>';
-  }
-
-  var resultDiv = document.getElementById('nearbyResults');
-  var statusDiv = document.getElementById('nearbyStatus');
-  var visitOnly = document.getElementById('nearbyVisitOnly');
-  var lastData = null;
-  function showStatus(msg) { statusDiv.innerHTML = msg; }
-
-  if (!navigator.geolocation) {
-    showStatus('<p style="color:#c62828;">お使いのブラウザは位置情報に対応していません。</p>');
-    return;
-  }
-
-  function render() {
-    if (!lastData) return;
-    var pool = lastData.slice();
-    if (visitOnly && visitOnly.checked) {
-      pool = pool.filter(function(c) { return c.v === 1; });
-    }
-
-    // 候補件数に応じて表示半径を自動調整（都市部で近すぎる候補に絞る）
-    var radius;
-    if (pool.length > 80) { radius = 4; }
-    else if (pool.length > 40) { radius = 6; }
-    else if (pool.length > 15) { radius = 8; }
-    else { radius = 16; }
-
-    var display = pool.filter(function(c) { return c._dist <= radius; });
-    display.sort(function(a, b) { return a._dist - b._dist; });
-
-    if (display.length === 0) {
-      showStatus('<p>現在地から16km以内に該当する歯科が見つかりませんでした。</p>' +
-                 '<p><a href="/">市区町村から探す →</a></p>');
-      resultDiv.innerHTML = '';
-      return;
-    }
-
-    var shown = display.slice(0, MAX_RESULTS);
-    showStatus('<p>現在地から <strong>' + radius + 'km</strong> 以内に <strong>' + display.length +
-               '</strong> 件。近い順に ' + shown.length + ' 件を表示しています。</p>');
-    resultDiv.innerHTML = shown.map(renderCard).join('');
-  }
-
-  showStatus('<p>📍 位置情報を取得中...</p>');
-
-  navigator.geolocation.getCurrentPosition(function(pos) {
-    var myLat = pos.coords.latitude;
-    var myLng = pos.coords.longitude;
-    showStatus('<p>📍 位置情報を取得しました。データを読み込み中...</p>');
-
-    fetch('/data/clinics_geo.json')
-      .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function(data) {
-        var initial = [];
-        for (var i = 0; i < data.length; i++) {
-          var c = data[i];
-          if (typeof c.lt !== 'number' || typeof c.lg !== 'number') continue;
-          var d = haversine(myLat, myLng, c.lt, c.lg);
-          if (d <= 16) { c._dist = d; initial.push(c); }
-        }
-        lastData = initial;
-        if (visitOnly) visitOnly.addEventListener('change', render);
-        render();
-      })
-      .catch(function(e) {
-        showStatus('<p style="color:#c62828;">データの読み込みに失敗しました。<br><small>' + esc(e.message) + '</small></p>');
-      });
-  }, function(err) {
-    if (err.code === 1) {
-      showStatus(
-        '<div style="text-align:left;max-width:500px;margin:0 auto;">' +
-        '<p style="color:#c62828;font-weight:bold;margin-bottom:12px;">位置情報の使用が許可されていません</p>' +
-        '<p style="margin-bottom:8px;">以下の手順で位置情報を許可してください：</p>' +
-        '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:8px;">' +
-        '<strong>iPhone (Safari)</strong><br>設定 → Safari → 位置情報 → 「確認」に変更<br>その後このページを再読み込み</div>' +
-        '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:8px;">' +
-        '<strong>Android (Chrome)</strong><br>アドレスバー左の鍵マーク → 位置情報 → 許可</div>' +
-        '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:12px;">' +
-        '<strong>PC (Chrome)</strong><br>アドレスバー左の鍵マーク → 位置情報 → 許可 → 再読み込み</div>' +
-        '<p><a href="/">市区町村から探す →</a></p></div>');
-    } else {
-      var msgs = {2: '位置情報を取得できませんでした。', 3: '位置情報の取得がタイムアウトしました。'};
-      showStatus('<p style="color:#c62828;">' + (msgs[err.code] || '位置情報の取得に失敗しました。') +
-        '</p><p><a href="/">市区町村から探す →</a></p>');
-    }
-  }, {enableHighAccuracy: false, timeout: 10000, maximumAge: 300000});
-})();
-"""
-
-
-def build_nearby_page():
-    """現在地から近い歯科を探すページ（clinic / kango / care と同一導線）"""
-    title = f'現在地から近い{ENTITY_TYPE}を探す｜{SITE_NAME}'
-    desc = f'現在地周辺の歯科診療所を距離順に表示。GPS位置情報を使って、訪問歯科に対応した近くの歯科をすぐに見つけられます。'
-    canonical = f'{SITE_URL}/nearby.html'
-
-    bc = make_breadcrumb([('トップ', '/'), ('現在地から探す', '')])
-
-    body = f"""<body>
-{make_header()}
-{bc}
-<div class="container">
-  <div class="hero">
-    <h1>現在地から近い{ENTITY_TYPE}を探す</h1>
-    <p>GPS位置情報を使って、現在地周辺の歯科診療所を近い順に最大20件表示します。</p>
-  </div>
-
-  <div class="filter-bar">
-    <label><input type="checkbox" id="nearbyVisitOnly">訪問歯科対応のみ</label>
-  </div>
-
-  <div id="nearbyStatus" style="padding:20px;text-align:center"></div>
-  <div id="nearbyResults" class="card-grid"></div>
-
-  <p style="margin-top:20px;font-size:0.9em;color:#666">
-    ※ 表示は直線距離に基づく近隣候補です。訪問歯科対応の判定は医療情報ネット（厚生労働省）の登録情報に基づきます。
-    実際の訪問可否・対応エリア・料金については各歯科診療所に直接お問い合わせください。
-  </p>
-
-  <p style="margin-top:24px"><a href="/">&larr; トップページに戻る</a></p>
-</div>
-{make_footer()}
-<script>{NEARBY_JS}</script>
-</body></html>"""
-
-    return make_head(title, desc, canonical) + body
-
-
-def generate_sitemap(clinics, cities, dist_dir):
+def generate_sitemap(clinics, cities, dist_dir, nearby_enabled=False):
     """sitemap.xml"""
     today = date.today().isoformat()
     urls = []
     urls.append((f'{SITE_URL}/', '1.0', 'weekly'))
     urls.append((f'{SITE_URL}/pref/kanagawa.html', '0.9', 'weekly'))
-    urls.append((f'{SITE_URL}/nearby.html', '0.5', 'monthly'))
     urls.append((f'{SITE_URL}/about.html', '0.3', 'yearly'))
+    urls.extend((f'{SITE_URL}/{name}.html', '0.2', 'yearly') for name in ('privacy', 'terms', 'contact'))
+    if nearby_enabled:
+        urls.append((f'{SITE_URL}/nearby.html', '0.5', 'monthly'))
 
     for cname in cities:
-        if len(cities[cname]) >= 2:
-            cslug = city_slug(cname)
-            urls.append((f'{SITE_URL}/pref/kanagawa/{cslug}.html', '0.8', 'weekly'))
+        cslug = city_slug(cname)
+        urls.append((f'{SITE_URL}/pref/kanagawa/{cslug}.html', '0.8', 'weekly'))
 
     for c in clinics:
         cid = clinic_slug(c['clinic_id'])
@@ -1032,7 +454,7 @@ def build_site():
     total = len(clinics)
     visiting = sum(1 for c in clinics if c.get('has_visiting_dental'))
     hygienist = sum(1 for c in clinics if c.get('has_hygienist_visit'))
-    with_coords = sum(1 for c in clinics if c.get('latitude'))
+    with_coords = sum(1 for c in clinics if c.get('latitude') and c.get('longitude'))
     unknown = sum(1 for c in clinics if c.get('detail_status') == 'unknown')
     print(f'データ: {total:,}件')
     print(f'  訪問歯科対応: {visiting} ({visiting/total*100:.1f}%)')
@@ -1062,9 +484,10 @@ def build_site():
     print('CSS/JS 生成完了')
 
     # トップページ = 神奈川県ページ（MVPは神奈川県のみ）
-    idx = build_index(clinics, pref_name, visiting)
+    idx = build_index(clinics, pref_name, visiting, depth=0, canonical_path='')
+    pref_idx = build_index(clinics, pref_name, visiting, depth=1, canonical_path='pref/kanagawa.html')
     (DIST_DIR / 'index.html').write_text(idx, encoding='utf-8')
-    (DIST_DIR / 'pref' / 'kanagawa.html').write_text(idx, encoding='utf-8')
+    (DIST_DIR / 'pref' / 'kanagawa.html').write_text(pref_idx, encoding='utf-8')
     print('index.html / pref/kanagawa.html 生成完了')
 
     # 市区町村ページ
@@ -1085,12 +508,15 @@ def build_site():
     print(f'歯科詳細ページ {len(clinics):,}枚生成完了')
 
     # 現在地から探すページ
-    (DIST_DIR / 'nearby.html').write_text(build_nearby_page(), encoding='utf-8')
+    nearby_enabled = total > 0 and (with_coords / total) >= NEARBY_MIN_COVERAGE_RATIO
+    (DIST_DIR / 'nearby.html').write_text(build_nearby_page(total, with_coords, nearby_enabled), encoding='utf-8')
     print('nearby.html 生成完了')
 
     # About ページ
-    about = build_about_page(total, visiting)
+    about = build_about_page(total, visiting, unknown)
     (DIST_DIR / 'about.html').write_text(about, encoding='utf-8')
+    for kind in ('privacy', 'terms', 'contact'):
+        (DIST_DIR / f'{kind}.html').write_text(build_trust_page(kind), encoding='utf-8')
     print('about.html 生成完了')
 
     # 検索JSON
@@ -1104,7 +530,7 @@ def build_site():
     print(f'地図用JSON: {geo_count}件')
 
     # sitemap
-    sitemap_count = generate_sitemap(clinics, cities, DIST_DIR)
+    sitemap_count = generate_sitemap(clinics, cities, DIST_DIR, nearby_enabled)
     print(f'sitemap.xml: {sitemap_count} URL')
 
     # robots.txt
@@ -1119,17 +545,21 @@ def build_site():
         (DIST_DIR / 'CNAME').write_text(f'{CNAME_DOMAIN}\n', encoding='utf-8')
 
     # 404ページ
-    page_404 = make_head(f'ページが見つかりません | {SITE_NAME}',
-                         'お探しのページは存在しません。',
-                         f'{SITE_URL}/404.html')
-    page_404 += f"""<body>
-{make_header()}
-<div class="container" style="text-align:center;padding:60px 20px">
+    page_404 = make_head(
+        f'ページが見つかりません | {SITE_NAME}',
+        'お探しのページは存在しません。',
+        f'{SITE_URL}/404.html',
+        extra_head=f'<base href="{h(SITE_URL)}/">',
+        noindex=True,
+    )
+    page_404 += f"""<body data-page-root="">
+{make_header(0)}
+<main id="main-content" class="container" style="text-align:center;padding:60px 20px">
   <h1 style="font-size:2.5em;color:#0066a0">404</h1>
   <p style="margin:16px 0">お探しのページが見つかりませんでした。</p>
-  <a href="/">トップページへ</a>
-</div>
-{make_footer()}"""
+  <a href="{h(SITE_URL)}/">トップページへ</a>
+</main>
+{make_footer(0)}"""
     (DIST_DIR / '404.html').write_text(page_404, encoding='utf-8')
 
     # === 品質チェック ===
@@ -1159,7 +589,7 @@ def build_site():
     print(f'{"=" * 60}')
 
     # heartbeat: record last run (fail-safe, never raises)
-    if '--preview' not in sys.argv:
+    if '--preview' not in sys.argv and '--build-only' not in sys.argv:
         try:
             import subprocess as _hb_subprocess
             import sys as _hb_sys

@@ -1,15 +1,20 @@
 {
   "site_name": "訪問歯科ナビ",
-  "site_description": "訪問歯科対応の歯科診療所を都道府県・市区町村から検索できるポータルサイト。寝たきり・通院困難な方向けに、歯科訪問診療・歯科衛生士訪問に対応する歯科を掲載しています。在宅ナビ群の訪問歯科版。",
+  "site_description": "神奈川県の歯科情報と、医療情報ネットで確認できた訪問歯科対応状況を市区町村・名称・住所から検索できるポータルサイト。",
   "site_url": "https://shika.zaitaku-navi.com",
   "parent_brand": "在宅ナビ",
   "parent_brand_url": "https://zaitaku-navi.com",
   "cname_domain": "shika.zaitaku-navi.com",
   "entity_name": "歯科",
-  "entity_type": "訪問歯科対応の歯科診療所",
+  "entity_type": "歯科診療所",
   "care_type": "訪問歯科診療",
   "entity_detail_prefix": "clinic",
   "operator_name": "MDX株式会社",
+  "operator_url": "https://mdx-inc.co.jp/",
+  "operator_privacy_url": "https://mdx-inc.co.jp/privacy.html",
+  "operator_contact_url": "https://mdx-inc.co.jp/#contact",
+  "data_recorded_date": "2026-04-12",
+  "nearby_min_coverage_ratio": 0.8,
   "analytics": {
     "ga4_id": "G-Y950N0JTG5"
   },

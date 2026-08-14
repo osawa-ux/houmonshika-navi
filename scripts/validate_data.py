@@ -34,12 +34,14 @@ git 管理は人間判断。初回実行時は記録のみ、2 回目以降は�
 
 Usage:
     python scripts/validate_data.py
+    python scripts/validate_data.py --check-only  # baseline を更新しない
 """
 from __future__ import annotations
 
 import json
 import re
 import sys
+import argparse
 from pathlib import Path
 
 # Windows のデフォルト stdout エンコーディング（cp932）だと日本語ログが文字化けする
@@ -179,8 +181,11 @@ def check_internal_link_spot(site_dir: Path) -> None:
         log("OK", f"internal link spot check: {len(candidates)} 代表ページ・{checked} href を確認、リンク切れなし")
 
 
-def check_baseline(metrics: dict[str, int]) -> None:
-    BASELINE_FILE.parent.mkdir(parents=True, exist_ok=True)
+def check_baseline(metrics: dict[str, int], *, update_baseline: bool = True) -> None:
+    # check-only is deliberately side-effect free: in particular it must not even
+    # create the baseline parent directory when the baseline is absent.
+    if update_baseline:
+        BASELINE_FILE.parent.mkdir(parents=True, exist_ok=True)
     previous = None
     if BASELINE_FILE.exists():
         try:
@@ -189,7 +194,10 @@ def check_baseline(metrics: dict[str, int]) -> None:
             previous = None
 
     if previous is None:
-        log("OK", f"baseline: 初回記録（{BASELINE_FILE.name} に保存）")
+        if update_baseline:
+            log("OK", f"baseline: 初回記録（{BASELINE_FILE.name} に保存）")
+        else:
+            log("OK", f"baseline: 未作成（check-only のため {BASELINE_FILE.name} を作成せず）")
     else:
         prev_metrics = previous.get("metrics", {})
         for key, current_value in metrics.items():
@@ -204,6 +212,10 @@ def check_baseline(metrics: dict[str, int]) -> None:
             else:
                 log("WARN", f"baseline 差分: {key} が {prev_value} → {current_value}（{drop_ratio:.1%} 減少）")
 
+    if not update_baseline:
+        log("OK", "baseline: check-only のため更新せず")
+        return
+
     # ラチェットガード（reviewer 指摘 2026-07-06）: FAIL 検出時は baseline を上書きしない。
     # 上書きすると件数減少 FAIL が naive リトライで緑化し「件数減少=停止」の警報が消えるため、
     # FAIL ゼロのときのみ現在値を新 baseline として記録する。
@@ -217,7 +229,16 @@ def check_baseline(metrics: dict[str, int]) -> None:
     )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check-only",
+        "--no-update-baseline",
+        action="store_true",
+        dest="check_only",
+        help="検査だけを行い、baseline の作成・更新を一切しない",
+    )
+    args = parser.parse_args(argv)
     if not DATA_FILE.exists():
         print(f"ERROR: {DATA_FILE} が存在しません。")
         return 1
@@ -228,7 +249,7 @@ def main() -> int:
 
     if not DIST_DIR.exists():
         log("OK", "dist/ が存在しません（未ビルド）。件数整合チェックは skip します。")
-        check_baseline({"data_record_count": data_count})
+        check_baseline({"data_record_count": data_count}, update_baseline=not args.check_only)
         return 0
 
     detail_count = count_html_files(DETAIL_DIR)
@@ -260,7 +281,7 @@ def main() -> int:
         "sitemap_loc_count": sitemap_locs,
         "total_html_count": total_html,
     }
-    check_baseline(metrics)
+    check_baseline(metrics, update_baseline=not args.check_only)
 
     fail_count = sum(1 for level, _ in results if level == "FAIL")
     warn_count = sum(1 for level, _ in results if level == "WARN")

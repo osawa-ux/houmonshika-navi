@@ -1,74 +1,12 @@
 (function(){
-  // フィルタ機能（ページ内のカードを非表示/表示）
-  var cards = document.querySelectorAll('.clinic-card');
-  var qInput = document.getElementById('q-input');
-  var visitOnly = document.getElementById('filter-visit');
-  var hygOnly = document.getElementById('filter-hyg');
-  var countLabel = document.getElementById('count-label');
-  var total = cards.length;
-
-  function applyFilter(){
-    var q = qInput ? qInput.value.trim().toLowerCase() : '';
-    var v = visitOnly && visitOnly.checked;
-    var hy = hygOnly && hygOnly.checked;
-    var shown = 0;
-    cards.forEach(function(c){
-      var name = (c.dataset.name||'').toLowerCase();
-      var addr = (c.dataset.addr||'').toLowerCase();
-      var hasV = c.dataset.visit === '1';
-      var hasH = c.dataset.hyg === '1';
-      var ok = true;
-      if(q && name.indexOf(q)<0 && addr.indexOf(q)<0) ok = false;
-      if(v && !hasV) ok = false;
-      if(hy && !hasH) ok = false;
-      c.style.display = ok ? '' : 'none';
-      if(ok) shown++;
-    });
-    if(countLabel){
-      countLabel.textContent = shown + ' / ' + total + ' 件表示中';
-    }
-  }
-
-  if(qInput) qInput.addEventListener('input', applyFilter);
-  if(visitOnly) visitOnly.addEventListener('change', applyFilter);
-  if(hygOnly) hygOnly.addEventListener('change', applyFilter);
-  applyFilter();
-
-  // 検索JSON（他ページへのジャンプ用、都道府県ページのみ）
-  var input=document.getElementById('search-input');
-  var results=document.getElementById('search-results');
-  var data=[];
-  var prefCode=document.body.dataset.prefCode||'';
-  if(prefCode && input){
-    fetch('/data/search/'+prefCode+'.json')
-      .then(function(r){return r.json()})
-      .then(function(d){data=d})
-      .catch(function(){});
-    var timer;
-    input.addEventListener('input',function(){
-      clearTimeout(timer);
-      timer=setTimeout(function(){doSearch()},200);
-    });
-    function doSearch(){
-      var q=input.value.trim().toLowerCase();
-      if(q.length<2){results.innerHTML='';return;}
-      var hits=data.filter(function(o){
-        return(o.st||'').toLowerCase().indexOf(q)>=0;
-      }).slice(0,30);
-      if(!hits.length){results.innerHTML='<p style="color:#999;margin-top:8px">該当する歯科が見つかりません</p>';return;}
-      var html=hits.map(function(o){
-        var badges='';
-        if(o.v) badges += '<span class="badge badge-visit">訪問歯科対応</span>';
-        if(o.h) badges += '<span class="badge badge-hyg">歯科衛生士訪問</span>';
-        return '<div class="card" style="margin-bottom:8px"><h3><a href="/clinic/'+esc(o.slug)+'.html">'+esc(o.n)+'</a></h3>'
-          +'<div class="meta"><span class="addr">'+esc(o.a)+'</span>'
-          +(o.tel?'<span class="tel">TEL: '+esc(o.tel)+'</span>':'')
-          +'</div>'
-          +(badges?'<div class="badges">'+badges+'</div>':'')
-          +'</div>';
-      }).join('');
-      results.innerHTML=html;
-    }
-  }
+  var cards=document.querySelectorAll('.clinic-card'),qInput=document.getElementById('q-input'),includeAll=document.getElementById('filter-all'),hygOnly=document.getElementById('filter-hyg'),countLabel=document.getElementById('count-label'),total=cards.length;
+  function applyFilter(){var q=qInput?qInput.value.trim().toLowerCase():'',all=includeAll&&includeAll.checked,hy=hygOnly&&hygOnly.checked,shown=0;cards.forEach(function(c){var ok=(!q||(c.dataset.name||'').toLowerCase().indexOf(q)>=0||(c.dataset.addr||'').toLowerCase().indexOf(q)>=0)&&(all||c.dataset.status==='confirmed_yes')&&(!hy||c.dataset.hyg==='1');c.hidden=!ok;if(ok)shown++;});if(countLabel)countLabel.textContent=shown+' / '+total+' 件表示中'+(all?'（全掲載）':'（訪問歯科対応確認済み）');}
+  if(qInput)qInput.addEventListener('input',applyFilter);if(includeAll)includeAll.addEventListener('change',applyFilter);if(hygOnly)hygOnly.addEventListener('change',applyFilter);applyFilter();
+  var input=document.getElementById('search-input'),results=document.getElementById('search-results'),searchStatus=document.getElementById('search-status'),searchAll=document.getElementById('search-all'),retry=document.getElementById('search-retry'),data=[],loadState='idle',prefCode=document.body.dataset.prefCode||'',root=document.body.dataset.pageRoot||'';
   function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function status(msg,isError){if(!searchStatus)return;searchStatus.textContent=msg;searchStatus.className='status-region'+(isError?' error':'');}
+  function load(){loadState='loading';data=[];if(retry)retry.hidden=true;status('検索データを読み込んでいます…');return fetch(root+'data/search/'+prefCode+'.json').then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(d){if(!Array.isArray(d))throw new Error('invalid');data=d;loadState='ready';status('2文字以上入力すると検索します。');if(input.value.trim().length>=2)doSearch();}).catch(function(){loadState='error';status('検索データを読み込めませんでした。再試行するか、市区町村から探してください。',true);if(retry)retry.hidden=false;});}
+  if(prefCode&&input){load();if(retry)retry.addEventListener('click',load);if(searchAll)searchAll.addEventListener('change',function(){if(input.value.trim().length>=2)doSearch();});var timer;input.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(doSearch,200);});
+    function doSearch(){var q=input.value.trim().toLowerCase();if(q.length<2){results.innerHTML='';status('2文字以上入力すると検索します。');return;}if(loadState==='loading'){status('検索データを読み込んでいます…');return;}if(loadState==='error'){status('検索データを読み込めませんでした。再試行してください。',true);return;}var all=searchAll&&searchAll.checked;var hits=data.filter(function(o){return(all||o.s==='confirmed_yes')&&(o.st||'').toLowerCase().indexOf(q)>=0;}).slice(0,30);if(!hits.length){results.innerHTML='';status('条件に一致する歯科は見つかりませんでした。');return;}results.innerHTML=hits.map(function(o){var badges=o.s==='confirmed_yes'?'<span class="badge badge-visit">訪問歯科対応確認済み</span>':(o.s==='unknown'?'<span class="badge badge-unknown">訪問対応情報 未確認</span>':'<span class="badge badge-no">訪問歯科情報の掲載なし</span>');if(o.h)badges+='<span class="badge badge-hyg">歯科衛生士訪問</span>';return '<div class="card" style="margin-bottom:8px"><h3><a href="'+root+'clinic/'+encodeURIComponent(o.slug)+'.html">'+esc(o.n)+'</a></h3><div class="meta"><span class="addr">'+esc(o.a)+'</span>'+(o.tel?'<span class="tel">TEL: '+esc(o.tel)+'</span>':'')+'</div><div class="badges">'+badges+'</div></div>';}).join('');status(hits.length+'件を表示しています。');}
+  }
 })();
